@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -9,11 +9,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CalendarIcon } from "lucide-react"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { cn } from "@/lib/utils"
-import { useMobile } from "@/hooks/use-mobile"
 
 interface CalendarItem {
   id: string
@@ -51,20 +51,14 @@ export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }
   const [repeatType, setRepeatType] = useState<"none" | "daily" | "weekly" | "monthly">("none")
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium")
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
-  const [isStartTimeOpen, setIsStartTimeOpen] = useState(false)
-  const [isEndTimeOpen, setIsEndTimeOpen] = useState(false)
-  const [formErrors, setFormErrors] = useState<{ title?: string }>({})
-  const isMobile = useMobile()
 
-  // Generate options for hours and minutes
+  // Генерируем варианты для часов и минут
   const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"))
   const minutes = Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, "0"))
 
-  // Reset form when dialog opens
+  // Сбрасываем форму при открытии диалога
   useEffect(() => {
     if (isOpen) {
-      setFormErrors({})
-
       if (item) {
         setTitle(item.title)
         setSelectedDate(new Date(item.date))
@@ -97,65 +91,33 @@ export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }
     }
   }, [isOpen, item, date, type])
 
-  const validateForm = useCallback(() => {
-    const errors: { title?: string } = {}
+  const handleSubmit = () => {
+    if (!title.trim()) return
 
-    if (!title.trim()) {
-      errors.title = "Название обязательно"
+    const newItem: CalendarItem = {
+      id: item?.id || Date.now().toString(),
+      title,
+      date: selectedDate.toISOString(),
+      type,
+      location,
+      description,
+      repeatType,
+      createdAt: item?.createdAt || new Date().toISOString(),
     }
 
-    setFormErrors(errors)
-    return Object.keys(errors).length === 0
-  }, [title])
-
-  const handleSubmit = useCallback(() => {
-    if (!validateForm()) return
-
-    try {
-      const newItem: CalendarItem = {
-        id: item?.id || Date.now().toString(),
-        title,
-        date: selectedDate.toISOString(),
-        type,
-        location,
-        description,
-        repeatType,
-        createdAt: item?.createdAt || new Date().toISOString(),
-      }
-
-      if (type === "task") {
-        newItem.completed = item?.completed || false
-        newItem.priority = priority
-      }
-
-      if (type === "event") {
-        newItem.startTime = `${startHour}:${startMinute}`
-        newItem.endTime = `${endHour}:${endMinute}`
-      }
-
-      onSave(newItem)
-      onClose()
-    } catch (error) {
-      console.error("Error saving item:", error)
-      // Here we could add toast notification for error
+    if (type === "task") {
+      newItem.completed = item?.completed || false
+      newItem.priority = priority
     }
-  }, [
-    item,
-    title,
-    selectedDate,
-    type,
-    location,
-    description,
-    repeatType,
-    priority,
-    startHour,
-    startMinute,
-    endHour,
-    endMinute,
-    onSave,
-    onClose,
-    validateForm,
-  ])
+
+    if (type === "event") {
+      newItem.startTime = `${startHour}:${startMinute}`
+      newItem.endTime = `${endHour}:${endMinute}`
+    }
+
+    onSave(newItem)
+    onClose()
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -179,9 +141,8 @@ export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }
               onChange={(e) => setTitle(e.target.value)}
               placeholder={`Название ${type === "event" ? "события" : "задачи"}`}
               autoComplete="off"
-              className={cn("h-12 text-base", formErrors.title && "border-red-500")}
+              className="h-12 text-base"
             />
-            {formErrors.title && <p className="text-sm text-red-500">{formErrors.title}</p>}
           </div>
 
           <div className="grid gap-2">
@@ -208,7 +169,6 @@ export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }
                     setIsCalendarOpen(false)
                   }}
                   locale={ru}
-                  initialFocus
                 />
               </PopoverContent>
             </Popover>
@@ -219,106 +179,62 @@ export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }
               <div className="grid gap-2">
                 <Label className="text-base">Время начала</Label>
                 <div className="flex gap-2">
-                  <Popover open={isStartTimeOpen} onOpenChange={setIsStartTimeOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="flex-1 h-12 text-base justify-between">
-                        {startHour}:{startMinute}
-                        <CalendarIcon className="h-5 w-5 ml-2 opacity-70" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="p-0 w-[280px]">
-                      <div className="grid grid-cols-2 p-3 gap-3">
-                        <div>
-                          <Label className="text-xs mb-2 block">Часы</Label>
-                          <div className="h-[200px] overflow-y-auto space-y-1 pr-2">
-                            {hours.map((hour) => (
-                              <Button
-                                key={`start-hour-${hour}`}
-                                variant={startHour === hour ? "default" : "ghost"}
-                                className="w-full justify-start"
-                                onClick={() => {
-                                  setStartHour(hour)
-                                }}
-                              >
-                                {hour}
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <Label className="text-xs mb-2 block">Минуты</Label>
-                          <div className="h-[200px] overflow-y-auto space-y-1 pr-2">
-                            {minutes.map((minute) => (
-                              <Button
-                                key={`start-minute-${minute}`}
-                                variant={startMinute === minute ? "default" : "ghost"}
-                                className="w-full justify-start"
-                                onClick={() => {
-                                  setStartMinute(minute)
-                                  setIsStartTimeOpen(false)
-                                }}
-                              >
-                                {minute}
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                  <Select value={startHour} onValueChange={setStartHour}>
+                    <SelectTrigger className="flex-1 h-12 text-base">
+                      <SelectValue placeholder="Часы" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hours.map((hour) => (
+                        <SelectItem key={`start-hour-${hour}`} value={hour}>
+                          {hour}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="flex items-center">:</span>
+                  <Select value={startMinute} onValueChange={setStartMinute}>
+                    <SelectTrigger className="flex-1 h-12 text-base">
+                      <SelectValue placeholder="Минуты" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {minutes.map((minute) => (
+                        <SelectItem key={`start-minute-${minute}`} value={minute}>
+                          {minute}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
               <div className="grid gap-2">
                 <Label className="text-base">Время окончания</Label>
                 <div className="flex gap-2">
-                  <Popover open={isEndTimeOpen} onOpenChange={setIsEndTimeOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="flex-1 h-12 text-base justify-between">
-                        {endHour}:{endMinute}
-                        <CalendarIcon className="h-5 w-5 ml-2 opacity-70" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="p-0 w-[280px]">
-                      <div className="grid grid-cols-2 p-3 gap-3">
-                        <div>
-                          <Label className="text-xs mb-2 block">Часы</Label>
-                          <div className="h-[200px] overflow-y-auto space-y-1 pr-2">
-                            {hours.map((hour) => (
-                              <Button
-                                key={`end-hour-${hour}`}
-                                variant={endHour === hour ? "default" : "ghost"}
-                                className="w-full justify-start"
-                                onClick={() => {
-                                  setEndHour(hour)
-                                }}
-                              >
-                                {hour}
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <Label className="text-xs mb-2 block">Минуты</Label>
-                          <div className="h-[200px] overflow-y-auto space-y-1 pr-2">
-                            {minutes.map((minute) => (
-                              <Button
-                                key={`end-minute-${minute}`}
-                                variant={endMinute === minute ? "default" : "ghost"}
-                                className="w-full justify-start"
-                                onClick={() => {
-                                  setEndMinute(minute)
-                                  setIsEndTimeOpen(false)
-                                }}
-                              >
-                                {minute}
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                  <Select value={endHour} onValueChange={setEndHour}>
+                    <SelectTrigger className="flex-1 h-12 text-base">
+                      <SelectValue placeholder="Часы" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hours.map((hour) => (
+                        <SelectItem key={`end-hour-${hour}`} value={hour}>
+                          {hour}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="flex items-center">:</span>
+                  <Select value={endMinute} onValueChange={setEndMinute}>
+                    <SelectTrigger className="flex-1 h-12 text-base">
+                      <SelectValue placeholder="Минуты" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {minutes.map((minute) => (
+                        <SelectItem key={`end-minute-${minute}`} value={minute}>
+                          {minute}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </>

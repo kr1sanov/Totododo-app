@@ -10,42 +10,18 @@ import { CalendarItemDialog } from "@/components/calendar-item-dialog"
 import { useToday } from "@/hooks/use-today"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
-import { useCalendarItems } from "@/hooks/use-calendar-items"
-import { useMobile } from "@/hooks/use-mobile"
-
-// Define the CalendarItem type here to avoid import issues
-interface CalendarItem {
-  id: string
-  type: "task" | "event"
-  title: string
-  date: string
-  startTime?: string
-  endTime?: string
-  location?: string
-  description?: string
-  completed?: boolean
-  priority?: "low" | "medium" | "high"
-  repeatType: "none" | "daily" | "weekly" | "monthly"
-  createdAt: string
-}
+import { useCalendarItems, type CalendarItem } from "@/hooks/use-calendar-items"
 
 export function CalendarView() {
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false)
   const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false)
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedType, setSelectedType] = useState<"event" | "task" | null>(null)
   const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null)
+  const { today, goToToday } = useToday()
+  const { addItem, updateItem } = useCalendarItems()
   const [forceUpdate, setForceUpdate] = useState(false)
-
-  // Use safe destructuring with default values
-  const todayHook = useToday() || {}
-  const { today = new Date(), goToToday = () => {} } = todayHook
-
-  const calendarItemsHook = useCalendarItems() || {}
-  const { addItem = () => {}, updateItem = () => {} } = calendarItemsHook
-
-  const isMobile = useMobile()
 
   const toggleCalendar = () => {
     setIsCalendarExpanded(!isCalendarExpanded)
@@ -53,10 +29,6 @@ export function CalendarView() {
 
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date)
-    // Auto-collapse calendar on mobile after date selection
-    if (isMobile) {
-      setIsCalendarExpanded(false)
-    }
   }
 
   const handleCreateItem = (date: Date) => {
@@ -78,28 +50,23 @@ export function CalendarView() {
     setIsItemDialogOpen(true)
   }
 
-  // Memoized function for saving items
+  // Мемоизируем функцию для избежания перерендеров
   const handleSaveItem = useCallback(
     (item: CalendarItem) => {
-      try {
-        if (selectedItem) {
-          updateItem(item)
-        } else {
-          addItem(item)
-        }
-        // Immediately update the interface after creating/editing
-        setForceUpdate((prev) => !prev)
-      } catch (error) {
-        console.error("Error saving item:", error)
-        // Here we could add toast notification for error
+      if (selectedItem) {
+        updateItem(item)
+      } else {
+        addItem(item)
       }
+      // Немедленно обновляем интерфейс после создания/редактирования
+      setForceUpdate((prev) => !prev)
     },
     [selectedItem, addItem, updateItem],
   )
 
-  // Function for closing item card
+  // Функция для закрытия карточки элемента
   const handleCloseItemCard = useCallback(() => {
-    // Force update component state when closing card
+    // Принудительно обновляем состояние компонента при закрытии карточки
     setForceUpdate((prev) => !prev)
   }, [])
 
@@ -110,30 +77,25 @@ export function CalendarView() {
           <div className="flex items-center">
             <div className="flex items-center">
               <h2 className="text-lg font-medium">{format(selectedDate || today, "LLLL", { locale: ru })}</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleCalendar}
-                className="ml-1"
-                aria-label={isCalendarExpanded ? "Скрыть календарь" : "Показать календарь"}
-              >
+              <Button variant="ghost" size="icon" onClick={toggleCalendar} className="ml-1">
                 {isCalendarExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </Button>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={goToToday} className="h-10 w-10" aria-label="Сегодня">
+            <Button variant="ghost" size="icon" onClick={goToToday} className="h-10 w-10">
               <CalendarIcon className="h-5 w-5" />
+              <span className="sr-only">Сегодня</span>
             </Button>
           </div>
         </div>
 
-        {isCalendarExpanded && <CalendarHeader onDateSelect={handleDateSelect} selectedDate={selectedDate} />}
+        {isCalendarExpanded && <CalendarHeader onDateSelect={handleDateSelect} selectedDate={selectedDate || today} />}
       </div>
 
       <div className="mt-[72px]">
         <CalendarTimeline
-          selectedDate={selectedDate}
+          selectedDate={selectedDate || today}
           onCreateItem={handleCreateItem}
           onEditItem={handleEditItem}
           forceUpdate={forceUpdate}
@@ -143,10 +105,9 @@ export function CalendarView() {
 
       <Button
         className="fixed bottom-24 right-4 rounded-full shadow-lg z-10 w-16 h-16 p-0"
-        onClick={() => handleCreateItem(selectedDate)}
-        aria-label="Создать новый элемент"
+        onClick={() => handleCreateItem(selectedDate || today)}
       >
-        <Plus className="h-8 w-8 font-bold" strokeWidth={3} />
+        <Plus className="h-10 w-10 font-bold" strokeWidth={3} />
       </Button>
 
       <ItemTypeDialog
@@ -160,10 +121,10 @@ export function CalendarView() {
           isOpen={isItemDialogOpen}
           onClose={() => {
             setIsItemDialogOpen(false)
-            // Update interface when closing dialog
+            // Обновляем интерфейс при закрытии диалога
             setForceUpdate((prev) => !prev)
           }}
-          date={selectedDate}
+          date={selectedDate || today}
           type={selectedType}
           item={selectedItem || undefined}
           onSave={handleSaveItem}

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useCallback } from "react"
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { format } from "date-fns"
@@ -15,7 +15,6 @@ import { cn } from "@/lib/utils"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
-import { useMobile } from "@/hooks/use-mobile"
 
 interface CalendarItem {
   id: string
@@ -44,20 +43,16 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
   const router = useRouter()
-  const isMobile = useMobile()
 
-  const toggleTaskCompletion = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      if (item.type === "task") {
-        onUpdate({
-          ...item,
-          completed: !item.completed,
-        })
-      }
-    },
-    [item, onUpdate],
-  )
+  const toggleTaskCompletion = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (item.type === "task") {
+      onUpdate({
+        ...item,
+        completed: !item.completed,
+      })
+    }
+  }
 
   const priorityColors = {
     low: "bg-blue-100 text-blue-800",
@@ -71,7 +66,7 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
     high: "Высокий",
   }
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = () => {
     if (item.repeatType !== "none") {
       setIsDeleteDialogOpen(true)
     } else {
@@ -79,17 +74,17 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
       setIsSheetOpen(false)
       onClose()
     }
-  }, [item.id, item.repeatType, onDelete, onClose])
+  }
 
-  const handleCloseSheet = useCallback(() => {
+  const handleCloseSheet = () => {
     setIsSheetOpen(false)
     onClose()
-  }, [onClose])
+  }
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     handleCloseSheet()
     router.back()
-  }, [handleCloseSheet, router])
+  }
 
   return (
     <>
@@ -146,21 +141,16 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenuItem onClick={() => onEdit(item)}>
-                      <Pencil className="h-4 w-4 mr-2" />
-                      Изменить
-                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onEdit(item)}>Изменить</DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
                         onArchive(item.id)
                         onClose()
                       }}
                     >
-                      <Archive className="h-4 w-4 mr-2" />
                       Архивировать
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleDelete} className="text-destructive">
-                      <Trash className="h-4 w-4 mr-2" />
                       Удалить
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -263,27 +253,27 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
               <Button
                 variant="outline"
                 size="lg"
-                className={isMobile ? "p-7" : "p-5"}
+                className="p-7"
                 onClick={() => {
                   setIsSheetOpen(false)
                   onEdit(item)
                 }}
               >
-                <Pencil className={isMobile ? "h-6 w-6" : "h-5 w-5"} />
+                <Pencil className="h-6 w-6" />
               </Button>
               <Button
                 variant="outline"
                 size="lg"
-                className={isMobile ? "p-7" : "p-5"}
+                className="p-7"
                 onClick={() => {
                   onArchive(item.id)
                   handleCloseSheet()
                 }}
               >
-                <Archive className={isMobile ? "h-6 w-6" : "h-5 w-5"} />
+                <Archive className="h-6 w-6" />
               </Button>
-              <Button variant="destructive" size="lg" className={isMobile ? "p-7" : "p-5"} onClick={handleDelete}>
-                <Trash className={isMobile ? "h-6 w-6" : "h-5 w-5"} />
+              <Button variant="destructive" size="lg" className="p-7" onClick={handleDelete}>
+                <Trash className="h-6 w-6" />
               </Button>
             </div>
           </div>

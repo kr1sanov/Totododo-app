@@ -8,7 +8,6 @@ import { CalendarItemCard } from "@/components/calendar-item-card"
 import { format, addDays, isToday, isSameDay, subDays, addMonths, subMonths } from "date-fns"
 import { ru } from "date-fns/locale"
 import { useCalendarItems } from "@/hooks/use-calendar-items"
-import { useMobile } from "@/hooks/use-mobile"
 
 interface CalendarItem {
   id: string
@@ -40,11 +39,10 @@ export function CalendarTimeline({
   const loadMoreTopRef = useRef<HTMLDivElement>(null)
   const loadMoreBottomRef = useRef<HTMLDivElement>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const isMobile = useMobile()
 
   const { getItemsByDate, updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
 
-  // Generate initial dates - 3 months before and after selected date
+  // Генерируем начальные даты на 3 месяца вперед и 3 месяца назад от выбранной даты
   const generateInitialDates = useCallback(() => {
     const startDate = subMonths(selectedDate, 3)
     const endDate = addMonths(selectedDate, 3)
@@ -60,12 +58,12 @@ export function CalendarTimeline({
     return newDates
   }, [selectedDate])
 
-  // Initialize dates
+  // Инициализация дат
   useEffect(() => {
     setDates(generateInitialDates())
   }, [generateInitialDates])
 
-  // Load more dates when scrolling down
+  // Загрузка дополнительных дат при прокрутке вниз
   const loadMoreDates = useCallback(() => {
     if (isLoading) return
 
@@ -89,7 +87,7 @@ export function CalendarTimeline({
     }, 300)
   }, [isLoading])
 
-  // Load previous dates when scrolling up
+  // Загрузка дополнительных дат при прокрутке вверх
   const loadPreviousDates = useCallback(() => {
     if (isLoading) return
 
@@ -109,7 +107,7 @@ export function CalendarTimeline({
         return [...newDates, ...prevDates]
       })
 
-      // Save scroll position
+      // Сохраняем позицию прокрутки
       if (timelineRef.current) {
         const currentScroll = timelineRef.current.scrollTop
 
@@ -124,7 +122,7 @@ export function CalendarTimeline({
     }, 300)
   }, [isLoading])
 
-  // Setup Intersection Observer for infinite scrolling down
+  // Настройка Intersection Observer для бесконечной прокрутки вниз
   useEffect(() => {
     if (loadMoreBottomRef.current && !bottomObserverRef.current) {
       bottomObserverRef.current = new IntersectionObserver(
@@ -147,7 +145,7 @@ export function CalendarTimeline({
     }
   }, [loadMoreDates, isLoading])
 
-  // Setup Intersection Observer for infinite scrolling up
+  // Настройка Intersection Observer для бесконечной прокрутки вверх
   useEffect(() => {
     if (loadMoreTopRef.current && !topObserverRef.current) {
       topObserverRef.current = new IntersectionObserver(
@@ -170,12 +168,12 @@ export function CalendarTimeline({
     }
   }, [loadPreviousDates, isLoading])
 
-  // Scroll to selected date
+  // Прокрутка к выбранной дате
   useEffect(() => {
     const dateIndex = dates.findIndex((date) => isSameDay(date, selectedDate))
 
     if (dateIndex !== -1) {
-      // Scroll to selected date with a small delay
+      // Прокрутка к выбранной дате с небольшой задержкой
       setTimeout(() => {
         const element = document.getElementById(`date-${selectedDate.toISOString().split("T")[0]}`)
         if (element && timelineRef.current) {
@@ -188,7 +186,7 @@ export function CalendarTimeline({
     }
   }, [selectedDate, dates])
 
-  // Memoize function for getting items for a date
+  // Мемоизируем функцию получения элементов для даты
   const getItemsForDate = useCallback(
     (date: Date) => {
       return getItemsByDate(date)
@@ -200,14 +198,14 @@ export function CalendarTimeline({
     return index === 0 || date.getDate() === 1
   }
 
-  // Use empty function as fallback for onClose to avoid errors
-  const emptyOnClose = useCallback(() => {}, [])
+  // Используем пустую функцию как fallback для onClose, чтобы избежать ошибок
+  const emptyOnClose = () => {}
 
   return (
     <div
       className="flex flex-col divide-y"
       ref={timelineRef}
-      style={{ height: "calc(100vh - 72px)", overflowY: "auto" }}
+      style={{ height: "calc(100vh - 120px)", overflowY: "auto" }}
     >
       <div ref={loadMoreTopRef} className="h-10 flex items-center justify-center text-muted-foreground">
         {isLoading ? "Загрузка..." : ""}
@@ -250,22 +248,17 @@ export function CalendarTimeline({
                         onClose={onCloseItemCard || emptyOnClose}
                       />
                     ))}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full text-base flex items-center justify-center"
-                      onClick={() => onCreateItem(date)}
-                    >
-                      <Plus className="h-5 w-5 mr-1 font-bold" /> Добавить
+                    <Button variant="ghost" size="sm" className="w-full text-base" onClick={() => onCreateItem(date)}>
+                      <Plus className="h-5 w-5 mr-1" /> Добавить
                     </Button>
                   </div>
                 ) : (
                   <Button
                     variant="ghost"
-                    className="w-full h-16 border-dashed text-base flex items-center justify-center"
+                    className="w-full h-16 border-dashed text-base"
                     onClick={() => onCreateItem(date)}
                   >
-                    <Plus className="h-5 w-5 mr-1 font-bold" /> Добавить
+                    <Plus className="h-5 w-5 mr-1" /> Добавить
                   </Button>
                 )}
               </div>
