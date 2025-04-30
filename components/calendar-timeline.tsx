@@ -7,30 +7,39 @@ import { cn } from "@/lib/utils"
 import { CalendarItemCard } from "@/components/calendar-item-card"
 import { format, addDays, isToday, isSameDay, subDays, addMonths, subMonths } from "date-fns"
 import { ru } from "date-fns/locale"
-import { useCalendarItems } from "@/hooks/use-calendar-items"
+import { useMobile } from "@/hooks/use-mobile"
 
 interface CalendarItem {
   id: string
-  date: Date
+  type: "task" | "event"
   title: string
+  date: string
+  startTime?: string
+  endTime?: string
+  location?: string
   description?: string
-  // Add other properties as needed
+  completed?: boolean
+  priority?: "low" | "medium" | "high"
+  repeatType: "none" | "daily" | "weekly" | "monthly"
+  createdAt: string
 }
 
 interface CalendarTimelineProps {
   selectedDate: Date
   onCreateItem: (date: Date) => void
   onEditItem: (item: CalendarItem) => void
-  forceUpdate?: boolean
-  onCloseItemCard?: () => void
+  items: CalendarItem[]
+  onUpdateItem: (item: CalendarItem) => void
+  onDeleteItem: (itemId: string) => void
 }
 
 export function CalendarTimeline({
   selectedDate,
   onCreateItem,
   onEditItem,
-  forceUpdate,
-  onCloseItemCard,
+  items,
+  onUpdateItem,
+  onDeleteItem,
 }: CalendarTimelineProps) {
   const [dates, setDates] = useState<Date[]>([])
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -39,10 +48,9 @@ export function CalendarTimeline({
   const loadMoreTopRef = useRef<HTMLDivElement>(null)
   const loadMoreBottomRef = useRef<HTMLDivElement>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const isMobile = useMobile()
 
-  const { getItemsByDate, updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
-
-  // Генерируем начальные даты на 3 месяца вперед и 3 месяца назад от выбранной даты
+  // Generate initial dates - 3 months before and after selected date
   const generateInitialDates = useCallback(() => {
     const startDate = subMonths(selectedDate, 3)
     const endDate = addMonths(selectedDate, 3)
@@ -58,12 +66,12 @@ export function CalendarTimeline({
     return newDates
   }, [selectedDate])
 
-  // Инициализация дат
+  // Initialize dates
   useEffect(() => {
     setDates(generateInitialDates())
   }, [generateInitialDates])
 
-  // Загрузка дополнительных дат при прокрутке вниз
+  // Load more dates when scrolling down
   const loadMoreDates = useCallback(() => {
     if (isLoading) return
 
@@ -87,7 +95,7 @@ export function CalendarTimeline({
     }, 300)
   }, [isLoading])
 
-  // Загрузка дополнительных дат при прокрутке вверх
+  // Load previous dates when scrolling up
   const loadPreviousDates = useCallback(() => {
     if (isLoading) return
 
@@ -107,7 +115,7 @@ export function CalendarTimeline({
         return [...newDates, ...prevDates]
       })
 
-      // Сохраняем позицию прокрутки
+      // Save scroll position
       if (timelineRef.current) {
         const currentScroll = timelineRef.current.scrollTop
 
@@ -122,7 +130,7 @@ export function CalendarTimeline({
     }, 300)
   }, [isLoading])
 
-  // Настройка Intersection Observer для бесконечной прокрутки вниз
+  // Setup Intersection Observer for infinite scrolling down
   useEffect(() => {
     if (loadMoreBottomRef.current && !bottomObserverRef.current) {
       bottomObserverRef.current = new IntersectionObserver(
@@ -145,7 +153,7 @@ export function CalendarTimeline({
     }
   }, [loadMoreDates, isLoading])
 
-  // Настройка Intersection Observer для бесконечной прокрутки вверх
+  // Setup Intersection Observer for infinite scrolling up
   useEffect(() => {
     if (loadMoreTopRef.current && !topObserverRef.current) {
       topObserverRef.current = new IntersectionObserver(
@@ -168,12 +176,12 @@ export function CalendarTimeline({
     }
   }, [loadPreviousDates, isLoading])
 
-  // Прокрутка к выбранной дате
+  // Scroll to selected date
   useEffect(() => {
     const dateIndex = dates.findIndex((date) => isSameDay(date, selectedDate))
 
     if (dateIndex !== -1) {
-      // Прокрутка к выбранной дате с небольшой задержкой
+      // Scroll to selected date with a small delay
       setTimeout(() => {
         const element = document.getElementById(`date-${selectedDate.toISOString().split("T")[0]}`)
         if (element && timelineRef.current) {
@@ -186,26 +194,44 @@ export function CalendarTimeline({
     }
   }, [selectedDate, dates])
 
-  // Мемоизируем функцию получения элементов для даты
+  // Функция для получения элементов для определенной даты
   const getItemsForDate = useCallback(
     (date: Date) => {
-      return getItemsByDate(date)
+      const dateString = date.toISOString().split("T")[0]
+
+      return items.filter((item) => {
+        const itemDate = new Date(item.date).toISOString().split("T")[0]
+
+        // Проверяем повторяющиеся элементы
+        if (item.repeatType !== "none") {
+          const itemDateObj = new Date(item.date)
+          const targetDate = date
+
+          if (item.repeatType === "daily") {
+            return true
+          } else if (item.repeatType === "weekly") {
+            return itemDateObj.getDay() === targetDate.getDay()
+          } else if (item.repeatType === "monthly") {
+            return itemDateObj.getDate() === targetDate.getDate()
+          }
+        }
+
+        // Для обычных элементов проверяем точное совпадение даты
+        return itemDate === dateString
+      })
     },
-    [getItemsByDate],
+    [items],
   )
 
   const isMonthStart = (date: Date, index: number) => {
     return index === 0 || date.getDate() === 1
   }
 
-  // Используем пустую функцию как fallback для onClose, чтобы избежать ошибок
-  const emptyOnClose = () => {}
-
   return (
     <div
       className="flex flex-col divide-y"
       ref={timelineRef}
-      style={{ height: "calc(100vh - 120px)", overflowY: "auto" }}
+      style={{ height: "calc(100vh - 72px)", overflowY: "auto" }}
     >
       <div ref={loadMoreTopRef} className="h-10 flex items-center justify-center text-muted-foreground">
         {isLoading ? "Загрузка..." : ""}
@@ -241,24 +267,27 @@ export function CalendarTimeline({
                       <CalendarItemCard
                         key={item.id}
                         item={item}
-                        onUpdate={updateItem}
-                        onDelete={(id, deleteAll) => (deleteAll ? deleteRecurringItem(id, true) : deleteItem(id))}
-                        onArchive={archiveItem}
+                        onUpdate={onUpdateItem}
+                        onDelete={onDeleteItem}
                         onEdit={onEditItem}
-                        onClose={onCloseItemCard || emptyOnClose}
                       />
                     ))}
-                    <Button variant="ghost" size="sm" className="w-full text-base" onClick={() => onCreateItem(date)}>
-                      <Plus className="h-5 w-5 mr-1" /> Добавить
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-base flex items-center justify-center"
+                      onClick={() => onCreateItem(date)}
+                    >
+                      <Plus className="h-5 w-5 mr-1 font-bold" /> Добавить
                     </Button>
                   </div>
                 ) : (
                   <Button
                     variant="ghost"
-                    className="w-full h-16 border-dashed text-base"
+                    className="w-full h-16 border-dashed text-base flex items-center justify-center"
                     onClick={() => onCreateItem(date)}
                   >
-                    <Plus className="h-5 w-5 mr-1" /> Добавить
+                    <Plus className="h-5 w-5 mr-1 font-bold" /> Добавить
                   </Button>
                 )}
               </div>

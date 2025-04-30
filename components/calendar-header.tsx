@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { format, addMonths, subMonths } from "date-fns"
+import { format, addMonths, subMonths, isToday, isSameDay } from "date-fns"
 import { ru } from "date-fns/locale"
+import { useMobile } from "@/hooks/use-mobile"
 
 interface CalendarHeaderProps {
   onDateSelect: (date: Date) => void
@@ -14,6 +15,18 @@ interface CalendarHeaderProps {
 
 export function CalendarHeader({ onDateSelect, selectedDate }: CalendarHeaderProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date(selectedDate))
+  const isMobile = useMobile()
+
+  // Update current month when selected date changes
+  useEffect(() => {
+    // Only update if the month is different
+    if (
+      currentMonth.getMonth() !== selectedDate.getMonth() ||
+      currentMonth.getFullYear() !== selectedDate.getFullYear()
+    ) {
+      setCurrentMonth(new Date(selectedDate))
+    }
+  }, [selectedDate, currentMonth])
 
   const daysOfWeek = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
 
@@ -67,13 +80,9 @@ export function CalendarHeader({ onDateSelect, selectedDate }: CalendarHeaderPro
     setCurrentMonth(addMonths(currentMonth, 1))
   }
 
-  const isToday = (day: number) => {
-    const today = new Date()
-    return day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
-  }
-
-  const isSelected = (day: number) => {
-    return day === selectedDate.getDate() && month === selectedDate.getMonth() && year === selectedDate.getFullYear()
+  const handleSelectDay = (day: number, monthOffset = 0) => {
+    const newDate = new Date(year, month + monthOffset, day)
+    onDateSelect(newDate)
   }
 
   return (
@@ -81,10 +90,10 @@ export function CalendarHeader({ onDateSelect, selectedDate }: CalendarHeaderPro
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm font-medium">{format(currentMonth, "LLLL yyyy", { locale: ru })}</div>
         <div className="flex space-x-2">
-          <Button variant="outline" size="icon" onClick={handlePrevMonth}>
+          <Button variant="outline" size="icon" onClick={handlePrevMonth} aria-label="Предыдущий месяц">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="icon" onClick={handleNextMonth}>
+          <Button variant="outline" size="icon" onClick={handleNextMonth} aria-label="Следующий месяц">
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -102,33 +111,39 @@ export function CalendarHeader({ onDateSelect, selectedDate }: CalendarHeaderPro
             key={`prev-${day}`}
             variant="ghost"
             className="h-8 w-full p-0 text-muted-foreground opacity-50"
-            onClick={() => onDateSelect(new Date(year, month - 1, day))}
+            onClick={() => handleSelectDay(day, -1)}
           >
             {day}
           </Button>
         ))}
 
-        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => (
-          <Button
-            key={`current-${day}`}
-            variant="ghost"
-            className={cn(
-              "h-8 w-full p-0",
-              isToday(day) && "bg-primary/10",
-              isSelected(day) && "bg-primary text-primary-foreground",
-            )}
-            onClick={() => onDateSelect(new Date(year, month, day))}
-          >
-            {day}
-          </Button>
-        ))}
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+          const currentDate = new Date(year, month, day)
+          const isCurrentDay = isToday(currentDate)
+          const isSelected = isSameDay(currentDate, selectedDate)
+
+          return (
+            <Button
+              key={`current-${day}`}
+              variant="ghost"
+              className={cn(
+                "h-8 w-full p-0",
+                isCurrentDay && "bg-primary/10",
+                isSelected && "bg-primary text-primary-foreground",
+              )}
+              onClick={() => handleSelectDay(day)}
+            >
+              {day}
+            </Button>
+          )
+        })}
 
         {nextMonthDays.map((day) => (
           <Button
             key={`next-${day}`}
             variant="ghost"
             className="h-8 w-full p-0 text-muted-foreground opacity-50"
-            onClick={() => onDateSelect(new Date(year, month + 1, day))}
+            onClick={() => handleSelectDay(day, 1)}
           >
             {day}
           </Button>

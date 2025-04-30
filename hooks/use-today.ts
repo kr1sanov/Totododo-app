@@ -9,5 +9,6 @@ export function useToday() {
     setToday(new Date())
   }, [])
 
+  // Always return a valid object
   return { today, goToToday }
 }

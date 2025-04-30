@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { CalendarIcon, ChevronDown, ChevronUp, Plus } from "lucide-react"
 import { CalendarHeader } from "@/components/calendar-header"
@@ -10,18 +10,36 @@ import { CalendarItemDialog } from "@/components/calendar-item-dialog"
 import { useToday } from "@/hooks/use-today"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
-import { useCalendarItems, type CalendarItem } from "@/hooks/use-calendar-items"
+import { useCalendarStore } from "@/lib/store"
+import { useMobile } from "@/hooks/use-mobile"
 
 export function CalendarView() {
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false)
   const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false)
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [selectedType, setSelectedType] = useState<"event" | "task" | null>(null)
-  const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null)
+  const [selectedItem, setSelectedItem] = useState<any | null>(null)
+
+  // Используем Zustand хранилище для календарных элементов
+  const { items, addItem, updateItem, removeItem, fetchItems, setupItemsSubscription } = useCalendarStore()
+
+  // Используем хуки
   const { today, goToToday } = useToday()
-  const { addItem, updateItem } = useCalendarItems()
-  const [forceUpdate, setForceUpdate] = useState(false)
+  const isMobile = useMobile()
+
+  // Загружаем элементы календаря и настраиваем подписку при монтировании
+  useEffect(() => {
+    fetchItems()
+
+    // Настраиваем подписку на изменения в реальном времени
+    const unsubscribe = setupItemsSubscription()
+
+    // Отписываемся при размонтировании
+    return () => {
+      unsubscribe()
+    }
+  }, [fetchItems, setupItemsSubscription])
 
   const toggleCalendar = () => {
     setIsCalendarExpanded(!isCalendarExpanded)
@@ -29,6 +47,10 @@ export function CalendarView() {
 
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date)
+    // Auto-collapse calendar on mobile after date selection
+    if (isMobile) {
+      setIsCalendarExpanded(false)
+    }
   }
 
   const handleCreateItem = (date: Date) => {
@@ -43,32 +65,29 @@ export function CalendarView() {
     setIsItemDialogOpen(true)
   }
 
-  const handleEditItem = (item: CalendarItem) => {
+  const handleEditItem = (item: any) => {
     setSelectedItem(item)
     setSelectedType(item.type)
     setSelectedDate(new Date(item.date))
     setIsItemDialogOpen(true)
   }
 
-  // Мемоизируем функцию для избежания перерендеров
+  // Мемоизированная функция для сохранения элементов
   const handleSaveItem = useCallback(
-    (item: CalendarItem) => {
-      if (selectedItem) {
-        updateItem(item)
-      } else {
-        addItem(item)
+    (item: any) => {
+      try {
+        if (selectedItem) {
+          updateItem(item.id, item)
+        } else {
+          addItem(item)
+        }
+        setIsItemDialogOpen(false)
+      } catch (error) {
+        console.error("Error saving item:", error)
       }
-      // Немедленно обновляем интерфейс после создания/редактирования
-      setForceUpdate((prev) => !prev)
     },
     [selectedItem, addItem, updateItem],
   )
-
-  // Функция для закрытия карточки элемента
-  const handleCloseItemCard = useCallback(() => {
-    // Принудительно обновляем состояние компонента при закрытии карточки
-    setForceUpdate((prev) => !prev)
-  }, [])
 
   return (
     <div className="flex flex-col">
@@ -77,37 +96,44 @@ export function CalendarView() {
           <div className="flex items-center">
             <div className="flex items-center">
               <h2 className="text-lg font-medium">{format(selectedDate || today, "LLLL", { locale: ru })}</h2>
-              <Button variant="ghost" size="icon" onClick={toggleCalendar} className="ml-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleCalendar}
+                className="ml-1"
+                aria-label={isCalendarExpanded ? "Скрыть календарь" : "Показать календарь"}
+              >
                 {isCalendarExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </Button>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={goToToday} className="h-10 w-10">
+            <Button variant="ghost" size="icon" onClick={goToToday} className="h-10 w-10" aria-label="Сегодня">
               <CalendarIcon className="h-5 w-5" />
-              <span className="sr-only">Сегодня</span>
             </Button>
           </div>
         </div>
 
-        {isCalendarExpanded && <CalendarHeader onDateSelect={handleDateSelect} selectedDate={selectedDate || today} />}
+        {isCalendarExpanded && <CalendarHeader onDateSelect={handleDateSelect} selectedDate={selectedDate} />}
       </div>
 
       <div className="mt-[72px]">
         <CalendarTimeline
-          selectedDate={selectedDate || today}
+          selectedDate={selectedDate}
           onCreateItem={handleCreateItem}
           onEditItem={handleEditItem}
-          forceUpdate={forceUpdate}
-          onCloseItemCard={handleCloseItemCard}
+          items={items}
+          onUpdateItem={updateItem}
+          onDeleteItem={removeItem}
         />
       </div>
 
       <Button
         className="fixed bottom-24 right-4 rounded-full shadow-lg z-10 w-16 h-16 p-0"
-        onClick={() => handleCreateItem(selectedDate || today)}
+        onClick={() => handleCreateItem(selectedDate)}
+        aria-label="Создать новый элемент"
       >
-        <Plus className="h-10 w-10 font-bold" strokeWidth={3} />
+        <Plus className="h-8 w-8 font-bold" strokeWidth={3} />
       </Button>
 
       <ItemTypeDialog
@@ -119,12 +145,8 @@ export function CalendarView() {
       {selectedType && (
         <CalendarItemDialog
           isOpen={isItemDialogOpen}
-          onClose={() => {
-            setIsItemDialogOpen(false)
-            // Обновляем интерфейс при закрытии диалога
-            setForceUpdate((prev) => !prev)
-          }}
-          date={selectedDate || today}
+          onClose={() => setIsItemDialogOpen(false)}
+          date={selectedDate}
           type={selectedType}
           item={selectedItem || undefined}
           onSave={handleSaveItem}

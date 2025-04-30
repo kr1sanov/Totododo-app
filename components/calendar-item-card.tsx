@@ -2,19 +2,18 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { format } from "date-fns"
-import { ru } from "date-fns/locale"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Calendar, MapPin, ArrowLeft, Pencil, Trash, Archive } from "lucide-react"
+import { MoreHorizontal, MapPin, ArrowLeft, Pencil, Trash } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
+import { useMobile } from "@/hooks/use-mobile"
 
 interface CalendarItem {
   id: string
@@ -33,26 +32,28 @@ interface CalendarItem {
 interface CalendarItemCardProps {
   item: CalendarItem
   onUpdate: (item: CalendarItem) => void
-  onDelete: (id: string, deleteAll?: boolean) => void
-  onArchive: (id: string) => void
+  onDelete: (id: string) => void
   onEdit: (item: CalendarItem) => void
-  onClose: () => void
 }
 
-export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, onClose }: CalendarItemCardProps) {
+export function CalendarItemCard({ item, onUpdate, onDelete, onEdit }: CalendarItemCardProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
   const router = useRouter()
+  const isMobile = useMobile()
 
-  const toggleTaskCompletion = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (item.type === "task") {
-      onUpdate({
-        ...item,
-        completed: !item.completed,
-      })
-    }
-  }
+  const toggleTaskCompletion = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (item.type === "task") {
+        onUpdate({
+          ...item,
+          completed: !item.completed,
+        })
+      }
+    },
+    [item, onUpdate],
+  )
 
   const priorityColors = {
     low: "bg-blue-100 text-blue-800",
@@ -66,25 +67,23 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
     high: "Высокий",
   }
 
-  const handleDelete = () => {
+  const handleDelete = useCallback(() => {
     if (item.repeatType !== "none") {
       setIsDeleteDialogOpen(true)
     } else {
       onDelete(item.id)
       setIsSheetOpen(false)
-      onClose()
     }
-  }
+  }, [item.id, item.repeatType, onDelete])
 
-  const handleCloseSheet = () => {
+  const handleCloseSheet = useCallback(() => {
     setIsSheetOpen(false)
-    onClose()
-  }
+  }, [])
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     handleCloseSheet()
     router.back()
-  }
+  }, [handleCloseSheet, router])
 
   return (
     <>
@@ -141,16 +140,12 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenuItem onClick={() => onEdit(item)}>Изменить</DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        onArchive(item.id)
-                        onClose()
-                      }}
-                    >
-                      Архивировать
+                    <DropdownMenuItem onClick={() => onEdit(item)}>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Изменить
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleDelete} className="text-destructive">
+                      <Trash className="h-4 w-4 mr-2" />
                       Удалить
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -195,86 +190,7 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
             </div>
 
             <div className="flex items-start gap-4">
-              <Calendar className="h-6 w-6 text-primary mt-0.5" />
-              <div>
-                <div className="font-medium">Дата</div>
-                <div>{format(new Date(item.date), "d MMMM yyyy", { locale: ru })}</div>
-                {item.type === "event" && (
-                  <div className="text-muted-foreground">
-                    {item.startTime} - {item.endTime}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {item.location && (
-              <div className="flex items-start gap-4">
-                <MapPin className="h-6 w-6 text-primary mt-0.5" />
-                <div>
-                  <div className="font-medium">Место</div>
-                  <div>
-                    {item.location.startsWith("http") ? (
-                      <a
-                        href={item.location}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 underline"
-                      >
-                        Подключиться к звонку
-                      </a>
-                    ) : (
-                      item.location
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {item.description && (
-              <div className="pt-4 border-t">
-                <div className="font-medium mb-2">Описание</div>
-                <div className="whitespace-pre-wrap">{item.description}</div>
-              </div>
-            )}
-
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t flex gap-4">
-              {item.type === "task" && (
-                <Button
-                  variant={item.completed ? "outline" : "default"}
-                  className="flex-1 py-7 text-base"
-                  onClick={() => {
-                    onUpdate({ ...item, completed: !item.completed })
-                    onClose()
-                  }}
-                >
-                  {item.completed ? "Не выполнено" : "Выполнено"}
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="lg"
-                className="p-7"
-                onClick={() => {
-                  setIsSheetOpen(false)
-                  onEdit(item)
-                }}
-              >
-                <Pencil className="h-6 w-6" />
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                className="p-7"
-                onClick={() => {
-                  onArchive(item.id)
-                  handleCloseSheet()
-                }}
-              >
-                <Archive className="h-6 w-6" />
-              </Button>
-              <Button variant="destructive" size="lg" className="p-7" onClick={handleDelete}>
-                <Trash className="h-6 w-6" />
-              </Button>
+              {/* Обновим компонент CalendarItemDialog для работы с Zustand: */}
             </div>
           </div>
         </SheetContent>
@@ -283,36 +199,21 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Удаление повторяющегося элемента</DialogTitle>
+            <DialogTitle>Удалить повторения?</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <p>Этот элемент является частью повторяющейся серии. Что вы хотите удалить?</p>
-          </div>
-          <DialogFooter className="flex-col sm:flex-row gap-3">
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsDeleteDialogOpen(false)}>
               Отмена
-            </Button>
-            <Button
-              variant="default"
-              onClick={() => {
-                onDelete(item.id, false)
-                setIsDeleteDialogOpen(false)
-                setIsSheetOpen(false)
-                onClose()
-              }}
-            >
-              Только этот элемент
             </Button>
             <Button
               variant="destructive"
               onClick={() => {
-                onDelete(item.id, true)
+                onDelete(item.id)
                 setIsDeleteDialogOpen(false)
                 setIsSheetOpen(false)
-                onClose()
               }}
             >
-              Все повторения
+              Удалить все
             </Button>
           </DialogFooter>
         </DialogContent>

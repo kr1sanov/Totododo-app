@@ -18,13 +18,14 @@ import {
   DropdownMenuPortal,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
-import { useProjects } from "@/hooks/use-projects"
 import { TaskDialog } from "@/components/task-dialog"
 import { TaskCard } from "@/components/task-card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ProjectStatistics } from "@/components/project-statistics"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { useTasks } from "@/hooks/use-tasks"
+import { createTask, updateTask, deleteTask } from "@/lib/actions"
 
 interface ProjectDetailsProps {
   id: string
@@ -38,36 +39,30 @@ export function ProjectDetails({ id }: ProjectDetailsProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isStatsOpen, setIsStatsOpen] = useState(false)
-  const { getProject } = useProjects()
+  const { tasks, loading, error } = useTasks(id)
   const [project, setProject] = useState<any>(null)
 
   // Получаем актуальные данные проекта
   useEffect(() => {
-    const currentProject = getProject(id)
-    setProject(currentProject)
-  }, [id, getProject])
-
-  // Обновляем проект при изменении данных
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      const currentProject = getProject(id)
-      setProject(currentProject)
-    }, 1000)
-
-    return () => clearInterval(intervalId)
-  }, [id, getProject])
+    // Здесь можно добавить загрузку проекта из API
+    setProject({
+      id,
+      name: "Проект",
+      tasks: tasks,
+    })
+  }, [id, tasks])
 
   if (!project) {
-    return <div className="p-4">Проект не найден</div>
+    return <div className="p-4">Загрузка проекта...</div>
   }
 
   // Получаем все уникальные теги из задач проекта
   const allTags = Array.from(
-    new Set(project.tasks.filter((task: any) => task.tags && task.tags.length > 0).flatMap((task: any) => task.tags)),
+    new Set(tasks.filter((task: any) => task.tags && task.tags.length > 0).flatMap((task: any) => task.tags)),
   ).sort()
 
   // Фильтрация задач по статусу, тегам и поиску
-  const filteredTasks = project.tasks.filter((task: any) => {
+  const filteredTasks = tasks.filter((task: any) => {
     // Фильтр по статусу
     if (statusFilter === "active" && task.completed) return false
     if (statusFilter === "completed" && !task.completed) return false
@@ -84,7 +79,7 @@ export function ProjectDetails({ id }: ProjectDetailsProps) {
       const query = searchQuery.toLowerCase()
       const titleMatch = task.title.toLowerCase().includes(query)
       const descMatch = task.description?.toLowerCase().includes(query) || false
-      const subtaskMatch = task.subtasks.some((subtask: any) => subtask.title.toLowerCase().includes(query))
+      const subtaskMatch = task.subtasks?.some((subtask: any) => subtask.title.toLowerCase().includes(query)) || false
       const tagMatch = task.tags?.some((tag: string) => tag.toLowerCase().includes(query)) || false
 
       return titleMatch || descMatch || subtaskMatch || tagMatch
@@ -104,8 +99,8 @@ export function ProjectDetails({ id }: ProjectDetailsProps) {
     return 0
   })
 
-  const completedTasks = project.tasks.filter((task: any) => task.completed).length
-  const totalTasks = project.tasks.length
+  const completedTasks = tasks.filter((task: any) => task.completed).length
+  const totalTasks = tasks.length
   const progressPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
 
   const toggleTagFilter = (tag: string) => {
@@ -118,6 +113,31 @@ export function ProjectDetails({ id }: ProjectDetailsProps) {
     setTagFilter([])
     setSortFilter("all")
     setIsSearchOpen(false)
+  }
+
+  const handleCreateTask = async (data: any) => {
+    try {
+      await createTask(id, data)
+      setIsTaskDialogOpen(false)
+    } catch (error) {
+      console.error("Error creating task:", error)
+    }
+  }
+
+  const handleUpdateTask = async (taskId: string, data: any) => {
+    try {
+      await updateTask(taskId, data)
+    } catch (error) {
+      console.error("Error updating task:", error)
+    }
+  }
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await deleteTask(taskId)
+    } catch (error) {
+      console.error("Error deleting task:", error)
+    }
   }
 
   return (
@@ -277,8 +297,20 @@ export function ProjectDetails({ id }: ProjectDetailsProps) {
       )}
 
       <div className="grid gap-4">
-        {sortedTasks.length > 0 ? (
-          sortedTasks.map((task) => <TaskCard key={task.id} task={task} projectId={project.id} />)
+        {loading ? (
+          <div className="text-center py-8 text-muted-foreground">Загрузка задач...</div>
+        ) : error ? (
+          <div className="text-center py-8 text-red-500">{error}</div>
+        ) : sortedTasks.length > 0 ? (
+          sortedTasks.map((task) => (
+            <TaskCard
+              key={task.id || task.temp_id}
+              task={task}
+              projectId={id}
+              onUpdate={(data) => handleUpdateTask(task.id, data)}
+              onDelete={() => handleDeleteTask(task.id)}
+            />
+          ))
         ) : (
           <div className="text-center py-8 text-muted-foreground">
             {searchQuery || statusFilter !== "all" || tagFilter.length > 0 ? (
@@ -304,7 +336,12 @@ export function ProjectDetails({ id }: ProjectDetailsProps) {
         <Plus className="h-6 w-6" />
       </Button>
 
-      <TaskDialog isOpen={isTaskDialogOpen} onClose={() => setIsTaskDialogOpen(false)} projectId={project.id} />
+      <TaskDialog
+        isOpen={isTaskDialogOpen}
+        onClose={() => setIsTaskDialogOpen(false)}
+        projectId={id}
+        onSubmit={handleCreateTask}
+      />
     </div>
   )
 }
