@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { CalendarIcon, ChevronDown, ChevronUp, Plus } from "lucide-react"
 import { CalendarHeader } from "@/components/calendar-header"
@@ -10,8 +10,24 @@ import { CalendarItemDialog } from "@/components/calendar-item-dialog"
 import { useToday } from "@/hooks/use-today"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
-import { useCalendarStore } from "@/lib/store"
+import { useCalendarItems } from "@/hooks/use-calendar-items"
 import { useMobile } from "@/hooks/use-mobile"
+
+// Define the CalendarItem type here to avoid import issues
+interface CalendarItem {
+  id: string
+  type: "task" | "event"
+  title: string
+  date: string
+  startTime?: string
+  endTime?: string
+  location?: string
+  description?: string
+  completed?: boolean
+  priority?: "low" | "medium" | "high"
+  repeatType: "none" | "daily" | "weekly" | "monthly"
+  createdAt: string
+}
 
 export function CalendarView() {
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false)
@@ -19,27 +35,17 @@ export function CalendarView() {
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [selectedType, setSelectedType] = useState<"event" | "task" | null>(null)
-  const [selectedItem, setSelectedItem] = useState<any | null>(null)
+  const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null)
+  const [forceUpdate, setForceUpdate] = useState(false)
 
-  // Используем Zustand хранилище для календарных элементов
-  const { items, addItem, updateItem, removeItem, fetchItems, setupItemsSubscription } = useCalendarStore()
+  // Use safe destructuring with default values
+  const todayHook = useToday() || {}
+  const { today = new Date(), goToToday = () => {} } = todayHook
 
-  // Используем хуки
-  const { today, goToToday } = useToday()
+  const calendarItemsHook = useCalendarItems() || {}
+  const { addItem = () => {}, updateItem = () => {} } = calendarItemsHook
+
   const isMobile = useMobile()
-
-  // Загружаем элементы календаря и настраиваем подписку при монтировании
-  useEffect(() => {
-    fetchItems()
-
-    // Настраиваем подписку на изменения в реальном времени
-    const unsubscribe = setupItemsSubscription()
-
-    // Отписываемся при размонтировании
-    return () => {
-      unsubscribe()
-    }
-  }, [fetchItems, setupItemsSubscription])
 
   const toggleCalendar = () => {
     setIsCalendarExpanded(!isCalendarExpanded)
@@ -65,29 +71,37 @@ export function CalendarView() {
     setIsItemDialogOpen(true)
   }
 
-  const handleEditItem = (item: any) => {
+  const handleEditItem = (item: CalendarItem) => {
     setSelectedItem(item)
     setSelectedType(item.type)
     setSelectedDate(new Date(item.date))
     setIsItemDialogOpen(true)
   }
 
-  // Мемоизированная функция для сохранения элементов
+  // Memoized function for saving items
   const handleSaveItem = useCallback(
-    (item: any) => {
+    (item: CalendarItem) => {
       try {
         if (selectedItem) {
-          updateItem(item.id, item)
+          updateItem(item)
         } else {
           addItem(item)
         }
-        setIsItemDialogOpen(false)
+        // Immediately update the interface after creating/editing
+        setForceUpdate((prev) => !prev)
       } catch (error) {
         console.error("Error saving item:", error)
+        // Here we could add toast notification for error
       }
     },
     [selectedItem, addItem, updateItem],
   )
+
+  // Function for closing item card
+  const handleCloseItemCard = useCallback(() => {
+    // Force update component state when closing card
+    setForceUpdate((prev) => !prev)
+  }, [])
 
   return (
     <div className="flex flex-col">
@@ -122,9 +136,8 @@ export function CalendarView() {
           selectedDate={selectedDate}
           onCreateItem={handleCreateItem}
           onEditItem={handleEditItem}
-          items={items}
-          onUpdateItem={updateItem}
-          onDeleteItem={removeItem}
+          forceUpdate={forceUpdate}
+          onCloseItemCard={handleCloseItemCard}
         />
       </div>
 
@@ -145,7 +158,11 @@ export function CalendarView() {
       {selectedType && (
         <CalendarItemDialog
           isOpen={isItemDialogOpen}
-          onClose={() => setIsItemDialogOpen(false)}
+          onClose={() => {
+            setIsItemDialogOpen(false)
+            // Update interface when closing dialog
+            setForceUpdate((prev) => !prev)
+          }}
           date={selectedDate}
           type={selectedType}
           item={selectedItem || undefined}

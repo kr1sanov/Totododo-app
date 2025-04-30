@@ -7,39 +7,31 @@ import { cn } from "@/lib/utils"
 import { CalendarItemCard } from "@/components/calendar-item-card"
 import { format, addDays, isToday, isSameDay, subDays, addMonths, subMonths } from "date-fns"
 import { ru } from "date-fns/locale"
+import { useCalendarItems } from "@/hooks/use-calendar-items"
 import { useMobile } from "@/hooks/use-mobile"
 
 interface CalendarItem {
   id: string
-  type: "task" | "event"
+  date: Date
   title: string
-  date: string
-  startTime?: string
-  endTime?: string
-  location?: string
   description?: string
-  completed?: boolean
-  priority?: "low" | "medium" | "high"
-  repeatType: "none" | "daily" | "weekly" | "monthly"
-  createdAt: string
+  // Add other properties as needed
 }
 
 interface CalendarTimelineProps {
   selectedDate: Date
   onCreateItem: (date: Date) => void
   onEditItem: (item: CalendarItem) => void
-  items: CalendarItem[]
-  onUpdateItem: (item: CalendarItem) => void
-  onDeleteItem: (itemId: string) => void
+  forceUpdate?: boolean
+  onCloseItemCard?: () => void
 }
 
 export function CalendarTimeline({
   selectedDate,
   onCreateItem,
   onEditItem,
-  items,
-  onUpdateItem,
-  onDeleteItem,
+  forceUpdate,
+  onCloseItemCard,
 }: CalendarTimelineProps) {
   const [dates, setDates] = useState<Date[]>([])
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -49,6 +41,8 @@ export function CalendarTimeline({
   const loadMoreBottomRef = useRef<HTMLDivElement>(null)
   const [isLoading, setIsLoading] = useState(false)
   const isMobile = useMobile()
+
+  const { getItemsByDate, updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
 
   // Generate initial dates - 3 months before and after selected date
   const generateInitialDates = useCallback(() => {
@@ -194,38 +188,20 @@ export function CalendarTimeline({
     }
   }, [selectedDate, dates])
 
-  // Функция для получения элементов для определенной даты
+  // Memoize function for getting items for a date
   const getItemsForDate = useCallback(
     (date: Date) => {
-      const dateString = date.toISOString().split("T")[0]
-
-      return items.filter((item) => {
-        const itemDate = new Date(item.date).toISOString().split("T")[0]
-
-        // Проверяем повторяющиеся элементы
-        if (item.repeatType !== "none") {
-          const itemDateObj = new Date(item.date)
-          const targetDate = date
-
-          if (item.repeatType === "daily") {
-            return true
-          } else if (item.repeatType === "weekly") {
-            return itemDateObj.getDay() === targetDate.getDay()
-          } else if (item.repeatType === "monthly") {
-            return itemDateObj.getDate() === targetDate.getDate()
-          }
-        }
-
-        // Для обычных элементов проверяем точное совпадение даты
-        return itemDate === dateString
-      })
+      return getItemsByDate(date)
     },
-    [items],
+    [getItemsByDate],
   )
 
   const isMonthStart = (date: Date, index: number) => {
     return index === 0 || date.getDate() === 1
   }
+
+  // Use empty function as fallback for onClose to avoid errors
+  const emptyOnClose = useCallback(() => {}, [])
 
   return (
     <div
@@ -267,9 +243,11 @@ export function CalendarTimeline({
                       <CalendarItemCard
                         key={item.id}
                         item={item}
-                        onUpdate={onUpdateItem}
-                        onDelete={onDeleteItem}
+                        onUpdate={updateItem}
+                        onDelete={(id, deleteAll) => (deleteAll ? deleteRecurringItem(id, true) : deleteItem(id))}
+                        onArchive={archiveItem}
                         onEdit={onEditItem}
+                        onClose={onCloseItemCard || emptyOnClose}
                       />
                     ))}
                     <Button
