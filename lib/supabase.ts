@@ -19,8 +19,16 @@ function createClientSupabaseClient() {
 
 // Экспортируем функцию для получения клиентского клиента
 export function getSupabaseClient() {
+  if (typeof window === "undefined") {
+    // Для серверного рендеринга создаем новый экземпляр
+    return createClientSupabaseClient()
+  }
+
   if (!clientInstance) {
     clientInstance = createClientSupabaseClient()
   }
   return clientInstance
 }
+
+// Экспортируем прямой клиент для удобства использования
+export const supabase = getSupabaseClient()
