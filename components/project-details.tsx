@@ -1,5 +1,7 @@
+"use client"
+
 import { createTask } from "@/lib/data"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Filter, Plus, Search, X, Tag, BarChart2 } from "lucide-react"
 import {
@@ -38,7 +40,7 @@ export function ProjectDetails({ id }: ProjectDetailsProps) {
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isStatsOpen, setIsStatsOpen] = useState(false)
   const { getProject } = useProjects()
-const [project, setProject] = useState(fetchedProject)
+  const [project, setProject] = useState(getProject(id))
 
   // Получаем актуальные данные проекта
   useEffect(() => {
@@ -117,6 +119,39 @@ const [project, setProject] = useState(fetchedProject)
     setTagFilter([])
     setSortFilter("all")
     setIsSearchOpen(false)
+  }
+
+  function handleCreateTask(newTaskData) {
+    const newTask = {
+      ...newTaskData,
+      id: String(Date.now()), // временный id
+      createdAt: new Date().toISOString(),
+      completed: false,
+    }
+
+    // 1. Добавляем задачу сразу на экран
+    setProject((prev) => ({
+      ...prev,
+      tasks: [newTask, ...prev.tasks],
+    }))
+
+    // 2. Отправляем на сервер
+    createTask(id, newTaskData)
+      .then((savedTask) => {
+        // 3. Заменяем временную на настоящую
+        setProject((prev) => ({
+          ...prev,
+          tasks: prev.tasks.map((t) => (t.id === newTask.id ? savedTask : t)),
+        }))
+      })
+      .catch((err) => {
+        console.error("Ошибка создания задачи", err)
+        // 4. Если ошибка — удаляем
+        setProject((prev) => ({
+          ...prev,
+          tasks: prev.tasks.filter((t) => t.id !== newTask.id),
+        }))
+      })
   }
 
   return (
@@ -306,36 +341,4 @@ const [project, setProject] = useState(fetchedProject)
       <TaskDialog isOpen={isTaskDialogOpen} onClose={() => setIsTaskDialogOpen(false)} projectId={project.id} />
     </div>
   )
-}
-function handleCreateTask(newTaskData) {
-  const newTask = {
-    ...newTaskData,
-    id: String(Date.now()), // временный id
-    createdAt: new Date().toISOString(),
-    completed: false
-  }
-
-  // 1. Добавляем задачу сразу на экран
-  setProject((prev) => ({
-    ...prev,
-    tasks: [newTask, ...prev.tasks]
-  }))
-
-  // 2. Отправляем на сервер
-  createTask(id, newTaskData).then((savedTask) => {
-    // 3. Заменяем временную на настоящую
-    setProject((prev) => ({
-      ...prev,
-      tasks: prev.tasks.map((t) =>
-        t.id === newTask.id ? savedTask : t
-      )
-    }))
-  }).catch((err) => {
-    console.error("Ошибка создания задачи", err)
-    // 4. Если ошибка — удаляем
-    setProject((prev) => ({
-      ...prev,
-      tasks: prev.tasks.filter((t) => t.id !== newTask.id)
-    }))
-  })
 }
