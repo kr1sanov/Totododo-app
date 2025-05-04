@@ -1,49 +1,74 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
+import type { Task, TaskStatus } from "@/types"
+import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
+import { CheckCircle2, Circle, Clock, ArchiveIcon, AlertCircle } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Calendar, MapPin, ArrowLeft, Pencil, Trash, Archive } from "lucide-react"
-import { useProjects } from "@/hooks/use-projects"
-import { TaskDialog } from "@/components/task-dialog"
-import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+import { useSwipeable } from "react-swipeable"
+import type React from "react"
+
+import { useRef } from "react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { MoreHorizontal, Calendar, MapPin, ArrowLeft, Pencil, Trash, LinkIcon } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Progress } from "@/components/ui/progress"
-
-interface Task {
-  id: string
-  title: string
-  completed: boolean
-  dueDate?: string
-  location?: string
-  priority: "low" | "medium" | "high"
-  subtasks: { id: string; title: string; completed: boolean }[]
-  description?: string
-  tags?: string[]
-}
+import { TaskDialog } from "@/components/task-dialog"
 
 interface TaskCardProps {
   task: Task
+  onEdit: () => void
+  onDelete: () => void
+  onArchive: () => void
+  onStatusChange: (status: TaskStatus) => void
   projectId: string
+  onUpdate?: (taskId: string, updatedTask: Partial<Task>) => void
+  onDelete?: (taskId: string) => void
 }
 
-export function TaskCard({ task, projectId }: TaskCardProps) {
+export function TaskCard({ task, onEdit, onDelete, onArchive, onStatusChange, projectId, onUpdate }: TaskCardProps) {
+  const [showActions, setShowActions] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isSheetOpen, setIsSheetOpen] = useState(false)
+  const { useProjects } = require("@/hooks/use-projects")
   const { updateTask, deleteTask, archiveTask } = useProjects()
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+  const statusIcon = {
+    todo: <Circle className="h-5 w-5 text-muted-foreground" />,
+    "in-progress": <Clock className="h-5 w-5 text-blue-500" />,
+    done: <CheckCircle2 className="h-5 w-5 text-green-500" />,
+    blocked: <AlertCircle className="h-5 w-5 text-red-500" />,
+  }
+
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => setShowActions(true),
+    onSwipedRight: () => setShowActions(false),
+    preventDefaultTouchmoveEvent: true,
+    trackMouse: true,
+  })
+
+  const handleStatusChange = (status: TaskStatus) => {
+    onStatusChange(status)
+    setShowActions(false)
+  }
 
   const toggleTaskCompletion = (e: React.MouseEvent) => {
     e.stopPropagation()
-    updateTask(projectId, {
-      ...task,
-      completed: !task.completed,
-    })
+
+    if (onUpdate) {
+      onUpdate(task.id, { completed: !task.completed })
+    } else {
+      updateTask(projectId, {
+        ...task,
+        completed: !task.completed,
+      })
+    }
   }
 
   const priorityColors = {
@@ -64,7 +89,7 @@ export function TaskCard({ task, projectId }: TaskCardProps) {
 
   return (
     <>
-      <Sheet>
+      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetTrigger asChild>
           <Card
             className={cn(
@@ -129,9 +154,9 @@ export function TaskCard({ task, projectId }: TaskCardProps) {
             </CardContent>
           </Card>
         </SheetTrigger>
-        <SheetContent side="bottom" className="h-[90vh] rounded-t-xl">
+        <SheetContent side="bottom" className="h-[90vh] rounded-t-xl" ref={scrollContainerRef}>
           <SheetHeader className="text-left border-b pb-4 mb-4 relative">
-            <Button variant="ghost" size="icon" className="absolute left-0 top-0">
+            <Button variant="ghost" size="icon" className="absolute left-0 top-0" onClick={() => setIsSheetOpen(false)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <SheetTitle className="text-xl font-bold text-center">{task.title}</SheetTitle>
@@ -192,6 +217,26 @@ export function TaskCard({ task, projectId }: TaskCardProps) {
               </div>
             )}
 
+            {task.files && task.files.length > 0 && (
+              <div className="pt-4 border-t">
+                <div className="font-medium mb-2">Файлы</div>
+                <div className="space-y-2">
+                  {task.files.map((file) => (
+                    <a
+                      key={file.url}
+                      href={file.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 hover:underline"
+                    >
+                      <LinkIcon className="h-4 w-4" />
+                      <span>{file.name}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {task.subtasks.length > 0 && (
               <div className="pt-4 border-t">
                 <div className="flex items-center justify-between mb-2">
@@ -226,7 +271,7 @@ export function TaskCard({ task, projectId }: TaskCardProps) {
                 <Pencil className="h-4 w-4" />
               </Button>
               <Button variant="outline" size="icon" onClick={() => archiveTask(projectId, task.id)}>
-                <Archive className="h-4 w-4" />
+                <ArchiveIcon className="h-4 w-4" />
               </Button>
               <Button variant="destructive" size="icon" onClick={() => deleteTask(projectId, task.id)}>
                 <Trash className="h-4 w-4" />

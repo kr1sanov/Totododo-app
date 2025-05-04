@@ -9,18 +9,11 @@ import { format, addDays, isToday, isSameDay, subDays, addMonths, subMonths } fr
 import { ru } from "date-fns/locale"
 import { useCalendarItems } from "@/hooks/use-calendar-items"
 
-interface CalendarItem {
-  id: string
-  date: Date
-  title: string
-  description?: string
-  // Add other properties as needed
-}
-
 interface CalendarTimelineProps {
   selectedDate: Date
   onCreateItem: (date: Date) => void
-  onEditItem: (item: CalendarItem) => void
+  onEditItem: (item: any) => void
+  onDeleteItem: (id: string, deleteAll: boolean) => void
   forceUpdate?: boolean
   onCloseItemCard?: () => void
 }
@@ -29,6 +22,7 @@ export function CalendarTimeline({
   selectedDate,
   onCreateItem,
   onEditItem,
+  onDeleteItem,
   forceUpdate,
   onCloseItemCard,
 }: CalendarTimelineProps) {
@@ -40,7 +34,7 @@ export function CalendarTimeline({
   const loadMoreBottomRef = useRef<HTMLDivElement>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const { getItemsByDate, updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
+  const { items, updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
 
   // Генерируем начальные даты на 3 месяца вперед и 3 месяца назад от выбранной даты
   const generateInitialDates = useCallback(() => {
@@ -186,12 +180,33 @@ export function CalendarTimeline({
     }
   }, [selectedDate, dates])
 
-  // Мемоизируем функцию получения элементов для даты
+  // Получение элементов для даты
   const getItemsForDate = useCallback(
     (date: Date) => {
-      return getItemsByDate(date)
+      const dateString = date.toISOString().split("T")[0]
+
+      return items.filter((item) => {
+        const itemDate = new Date(item.date).toISOString().split("T")[0]
+
+        // Проверяем повторяющиеся элементы
+        if (item.repeatType !== "none") {
+          const itemDateObj = new Date(item.date)
+          const targetDate = new Date(date)
+
+          if (item.repeatType === "daily") {
+            return true
+          } else if (item.repeatType === "weekly") {
+            return itemDateObj.getDay() === targetDate.getDay()
+          } else if (item.repeatType === "monthly") {
+            return itemDateObj.getDate() === targetDate.getDate()
+          }
+        }
+
+        // Для обычных элементов проверяем точное совпадение даты
+        return itemDate === dateString
+      })
     },
-    [getItemsByDate],
+    [items],
   )
 
   const isMonthStart = (date: Date, index: number) => {
@@ -214,12 +229,17 @@ export function CalendarTimeline({
       {dates.map((date, index) => {
         const dateItems = getItemsForDate(date)
         const isFirstOfMonth = isMonthStart(date, index)
+        const monthLabel = format(date, "LLLL yyyy", { locale: ru })
 
         return (
           <div key={date.toISOString()} id={`date-${date.toISOString().split("T")[0]}`}>
             {isFirstOfMonth && (
-              <div className="py-2 px-4 bg-muted/30 font-medium sticky top-0 z-10">
-                {format(date, "LLLL yyyy", { locale: ru })}
+              <div
+                className="py-2 px-4 bg-muted/30 font-medium sticky top-0 z-10"
+                data-month-header
+                data-month-label={monthLabel}
+              >
+                {monthLabel}
               </div>
             )}
             <div className="flex">
@@ -242,7 +262,13 @@ export function CalendarTimeline({
                         key={item.id}
                         item={item}
                         onUpdate={updateItem}
-                        onDelete={(id, deleteAll) => (deleteAll ? deleteRecurringItem(id, true) : deleteItem(id))}
+                        onDelete={(id, deleteAll) => {
+                          if (deleteAll) {
+                            deleteRecurringItem(id, true)
+                          } else {
+                            onDeleteItem(id, false)
+                          }
+                        }}
                         onArchive={archiveItem}
                         onEdit={onEditItem}
                         onClose={onCloseItemCard || emptyOnClose}

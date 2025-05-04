@@ -2,19 +2,20 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Calendar, MapPin, ArrowLeft, Pencil, Trash, Archive } from "lucide-react"
+import { MoreHorizontal, Calendar, MapPin, ArrowLeft, Pencil, Trash, Archive, Copy, Video } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetTrigger } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
+import { toast } from "@/components/ui/use-toast"
 
 interface CalendarItem {
   id: string
@@ -28,6 +29,10 @@ interface CalendarItem {
   completed?: boolean
   priority?: "low" | "medium" | "high"
   repeatType: "none" | "daily" | "weekly" | "monthly"
+  videoMeetingUrl?: string
+  files?: { name: string; url: string }[]
+  isAllDay?: boolean
+  endDate?: string
 }
 
 interface CalendarItemCardProps {
@@ -43,6 +48,23 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
   const router = useRouter()
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const [scrollPosition, setScrollPosition] = useState(0)
+
+  // Обработка свайпа для кнопок
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current
+    if (!scrollContainer) return
+
+    const handleScroll = () => {
+      setScrollPosition(scrollContainer.scrollLeft)
+    }
+
+    scrollContainer.addEventListener("scroll", handleScroll)
+    return () => {
+      scrollContainer.removeEventListener("scroll", handleScroll)
+    }
+  }, [])
 
   const toggleTaskCompletion = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -86,6 +108,14 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
     router.back()
   }
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    toast({
+      title: "Скопировано",
+      description: "Ссылка скопирована в буфер обмена",
+    })
+  }
+
   return (
     <>
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
@@ -119,9 +149,14 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
                     {item.type === "task" && item.priority && (
                       <Badge className={priorityColors[item.priority]}>{priorityLabels[item.priority]}</Badge>
                     )}
-                    {item.type === "event" && (
+                    {item.type === "event" && !item.isAllDay && (
                       <Badge variant="outline" className="bg-primary/10">
                         {item.startTime} - {item.endTime}
+                      </Badge>
+                    )}
+                    {item.type === "event" && item.isAllDay && (
+                      <Badge variant="outline" className="bg-primary/10">
+                        Весь день
                       </Badge>
                     )}
                   </div>
@@ -164,10 +199,15 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
             <Button variant="ghost" size="icon" className="absolute left-0 top-0 h-14 w-14" onClick={handleBack}>
               <ArrowLeft className="h-8 w-8" />
             </Button>
-            <SheetTitle className="text-xl font-bold text-center">{item.title}</SheetTitle>
           </SheetHeader>
 
-          <div className="space-y-6">
+          <div className="space-y-6 pb-24">
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold">{item.title}</h2>
+
+              {item.description && <div className="whitespace-pre-wrap text-muted-foreground">{item.description}</div>}
+            </div>
+
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="capitalize">
                 {item.type === "event" ? "Событие" : "Задача"}
@@ -199,13 +239,50 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
               <div>
                 <div className="font-medium">Дата</div>
                 <div>{format(new Date(item.date), "d MMMM yyyy", { locale: ru })}</div>
-                {item.type === "event" && (
+                {item.type === "event" && !item.isAllDay && (
                   <div className="text-muted-foreground">
                     {item.startTime} - {item.endTime}
                   </div>
                 )}
+                {item.type === "event" && item.isAllDay && <div className="text-muted-foreground">Весь день</div>}
+                {item.type === "event" &&
+                  item.endDate &&
+                  format(new Date(item.date), "d MMM yyyy", { locale: ru }) !==
+                    format(new Date(item.endDate), "d MMM yyyy", { locale: ru }) && (
+                    <div className="text-muted-foreground">
+                      До {format(new Date(item.endDate), "d MMMM yyyy", { locale: ru })}
+                    </div>
+                  )}
               </div>
             </div>
+
+            {item.videoMeetingUrl && (
+              <div className="flex items-start gap-4">
+                <Video className="h-6 w-6 text-primary mt-0.5" />
+                <div>
+                  <div className="font-medium">Видеовстреча</div>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={item.videoMeetingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 underline flex items-center"
+                    >
+                      <Video className="h-4 w-4 mr-1" />
+                      Присоединиться
+                    </a>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 p-0"
+                      onClick={() => copyToClipboard(item.videoMeetingUrl!)}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {item.location && (
               <div className="flex items-start gap-4">
@@ -230,18 +307,38 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
               </div>
             )}
 
-            {item.description && (
+            {item.files && item.files.length > 0 && (
               <div className="pt-4 border-t">
-                <div className="font-medium mb-2">Описание</div>
-                <div className="whitespace-pre-wrap">{item.description}</div>
+                <div className="font-medium mb-2">Файлы</div>
+                <div className="space-y-2">
+                  {item.files.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 border rounded-md">
+                      <a
+                        href={file.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500 hover:underline flex items-center"
+                      >
+                        <MapPin className="h-4 w-4 mr-2" />
+                        {file.name}
+                      </a>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
+          </div>
 
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t flex gap-4">
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t">
+            <div
+              className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar"
+              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              ref={scrollContainerRef}
+            >
               {item.type === "task" && (
                 <Button
                   variant={item.completed ? "outline" : "default"}
-                  className="flex-1 py-7 text-base"
+                  className="flex-shrink-0 py-7 text-base min-w-[140px]"
                   onClick={() => {
                     onUpdate({ ...item, completed: !item.completed })
                     onClose()
@@ -253,27 +350,30 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
               <Button
                 variant="outline"
                 size="lg"
-                className="p-7"
+                className="p-7 flex-shrink-0"
                 onClick={() => {
                   setIsSheetOpen(false)
                   onEdit(item)
                 }}
               >
                 <Pencil className="h-6 w-6" />
+                <span className="ml-2">Редактировать</span>
               </Button>
               <Button
                 variant="outline"
                 size="lg"
-                className="p-7"
+                className="p-7 flex-shrink-0"
                 onClick={() => {
                   onArchive(item.id)
                   handleCloseSheet()
                 }}
               >
                 <Archive className="h-6 w-6" />
+                <span className="ml-2">Архивировать</span>
               </Button>
-              <Button variant="destructive" size="lg" className="p-7" onClick={handleDelete}>
+              <Button variant="destructive" size="lg" className="p-7 flex-shrink-0" onClick={handleDelete}>
                 <Trash className="h-6 w-6" />
+                <span className="ml-2">Удалить</span>
               </Button>
             </div>
           </div>

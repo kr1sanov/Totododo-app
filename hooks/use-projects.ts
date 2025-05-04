@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { getFromStorage, saveToStorage } from "@/lib/storage-utils"
+import { toast } from "@/components/ui/use-toast"
 
 export interface Subtask {
   id: string
@@ -51,55 +52,82 @@ export function useProjects() {
     }
   }, [projects, isInitialized])
 
-  const getProject = (id: string) => {
-    return projects.find((project) => project.id === id)
-  }
+  const getProject = useCallback(
+    (id: string) => {
+      return projects.find((project) => project.id === id)
+    },
+    [projects],
+  )
 
-  const addProject = (project: Project) => {
+  const addProject = useCallback((project: Project) => {
     setProjects((prevProjects) => [...prevProjects, project])
-  }
+    toast({
+      title: "Проект создан",
+      description: `Проект "${project.name}" успешно создан`,
+    })
+  }, [])
 
-  const updateProject = (updatedProject: Project) => {
+  const updateProject = useCallback((updatedProject: Project) => {
     setProjects((prevProjects) =>
       prevProjects.map((project) => (project.id === updatedProject.id ? updatedProject : project)),
     )
-  }
+    toast({
+      title: "Проект обновлен",
+      description: `Проект "${updatedProject.name}" успешно обновлен`,
+    })
+  }, [])
 
-  const deleteProject = (id: string) => {
-    const projectToDelete = projects.find((project) => project.id === id)
-    if (projectToDelete) {
-      // Add to trash
-      const trashedItems = getFromStorage("totododo-trash", [])
-      trashedItems.push({
-        ...projectToDelete,
-        type: "projects",
-        deletedAt: new Date().toISOString(),
-      })
-      saveToStorage("totododo-trash", trashedItems)
+  const deleteProject = useCallback(
+    (id: string) => {
+      const projectToDelete = projects.find((project) => project.id === id)
+      if (projectToDelete) {
+        // Оптимистичное обновление UI
+        setProjects((prevProjects) => prevProjects.filter((project) => project.id !== id))
 
-      // Remove from projects
-      setProjects((prevProjects) => prevProjects.filter((project) => project.id !== id))
-    }
-  }
+        // Add to trash
+        const trashedItems = getFromStorage("totododo-trash", [])
+        trashedItems.push({
+          ...projectToDelete,
+          type: "projects",
+          deletedAt: new Date().toISOString(),
+        })
+        saveToStorage("totododo-trash", trashedItems)
 
-  const archiveProject = (id: string) => {
-    const projectToArchive = projects.find((project) => project.id === id)
-    if (projectToArchive) {
-      // Add to archive
-      const archivedItems = getFromStorage("totododo-archive", [])
-      archivedItems.push({
-        ...projectToArchive,
-        type: "projects",
-        archivedAt: new Date().toISOString(),
-      })
-      saveToStorage("totododo-archive", archivedItems)
+        toast({
+          title: "Проект удален",
+          description: `Проект "${projectToDelete.name}" перемещен в корзину`,
+        })
+      }
+    },
+    [projects],
+  )
 
-      // Remove from projects
-      setProjects((prevProjects) => prevProjects.filter((project) => project.id !== id))
-    }
-  }
+  const archiveProject = useCallback(
+    (id: string) => {
+      const projectToArchive = projects.find((project) => project.id === id)
+      if (projectToArchive) {
+        // Оптимистичное обновление UI
+        setProjects((prevProjects) => prevProjects.filter((project) => project.id !== id))
 
-  const addTask = (projectId: string, task: Task) => {
+        // Add to archive
+        const archivedItems = getFromStorage("totododo-archive", [])
+        archivedItems.push({
+          ...projectToArchive,
+          type: "projects",
+          archivedAt: new Date().toISOString(),
+        })
+        saveToStorage("totododo-archive", archivedItems)
+
+        toast({
+          title: "Проект архивирован",
+          description: `Проект "${projectToArchive.name}" перемещен в архив`,
+        })
+      }
+    },
+    [projects],
+  )
+
+  const addTask = useCallback((projectId: string, task: Task) => {
     setProjects((prevProjects) =>
       prevProjects.map((project) => {
         if (project.id === projectId) {
@@ -111,9 +139,14 @@ export function useProjects() {
         return project
       }),
     )
-  }
 
-  const updateTask = (projectId: string, updatedTask: Task) => {
+    toast({
+      title: "Задача создана",
+      description: `Задача "${task.title}" успешно создана`,
+    })
+  }, [])
+
+  const updateTask = useCallback((projectId: string, updatedTask: Task) => {
     setProjects((prevProjects) =>
       prevProjects.map((project) => {
         if (project.id === projectId) {
@@ -125,67 +158,88 @@ export function useProjects() {
         return project
       }),
     )
-  }
 
-  const deleteTask = (projectId: string, taskId: string) => {
-    const project = projects.find((p) => p.id === projectId)
-    const taskToDelete = project?.tasks.find((t) => t.id === taskId)
+    toast({
+      title: "Задача обновлена",
+      description: `Задача "${updatedTask.title}" успешно обновлена`,
+    })
+  }, [])
 
-    if (project && taskToDelete) {
-      // Add to trash
-      const trashedItems = getFromStorage("totododo-trash", [])
-      trashedItems.push({
-        ...taskToDelete,
-        projectId,
-        type: "tasks",
-        deletedAt: new Date().toISOString(),
-      })
-      saveToStorage("totododo-trash", trashedItems)
+  const deleteTask = useCallback(
+    (projectId: string, taskId: string) => {
+      const project = projects.find((p) => p.id === projectId)
+      const taskToDelete = project?.tasks.find((t) => t.id === taskId)
 
-      // Remove from project
-      setProjects((prevProjects) =>
-        prevProjects.map((p) => {
-          if (p.id === projectId) {
-            return {
-              ...p,
-              tasks: p.tasks.filter((t) => t.id !== taskId),
+      if (project && taskToDelete) {
+        // Оптимистичное обновление UI
+        setProjects((prevProjects) =>
+          prevProjects.map((p) => {
+            if (p.id === projectId) {
+              return {
+                ...p,
+                tasks: p.tasks.filter((t) => t.id !== taskId),
+              }
             }
-          }
-          return p
-        }),
-      )
-    }
-  }
+            return p
+          }),
+        )
 
-  const archiveTask = (projectId: string, taskId: string) => {
-    const project = projects.find((p) => p.id === projectId)
-    const taskToArchive = project?.tasks.find((t) => t.id === taskId)
+        // Add to trash
+        const trashedItems = getFromStorage("totododo-trash", [])
+        trashedItems.push({
+          ...taskToDelete,
+          projectId,
+          type: "tasks",
+          deletedAt: new Date().toISOString(),
+        })
+        saveToStorage("totododo-trash", trashedItems)
 
-    if (project && taskToArchive) {
-      // Add to archive
-      const archivedItems = getFromStorage("totododo-archive", [])
-      archivedItems.push({
-        ...taskToArchive,
-        projectId,
-        type: "tasks",
-        archivedAt: new Date().toISOString(),
-      })
-      saveToStorage("totododo-archive", archivedItems)
+        toast({
+          title: "Задача удалена",
+          description: `Задача "${taskToDelete.title}" перемещена в корзину`,
+        })
+      }
+    },
+    [projects],
+  )
 
-      // Remove from project
-      setProjects((prevProjects) =>
-        prevProjects.map((p) => {
-          if (p.id === projectId) {
-            return {
-              ...p,
-              tasks: p.tasks.filter((t) => t.id !== taskId),
+  const archiveTask = useCallback(
+    (projectId: string, taskId: string) => {
+      const project = projects.find((p) => p.id === projectId)
+      const taskToArchive = project?.tasks.find((t) => t.id === taskId)
+
+      if (project && taskToArchive) {
+        // Оптимистичное обновление UI
+        setProjects((prevProjects) =>
+          prevProjects.map((p) => {
+            if (p.id === projectId) {
+              return {
+                ...p,
+                tasks: p.tasks.filter((t) => t.id !== taskId),
+              }
             }
-          }
-          return p
-        }),
-      )
-    }
-  }
+            return p
+          }),
+        )
+
+        // Add to archive
+        const archivedItems = getFromStorage("totododo-archive", [])
+        archivedItems.push({
+          ...taskToArchive,
+          projectId,
+          type: "tasks",
+          archivedAt: new Date().toISOString(),
+        })
+        saveToStorage("totododo-archive", archivedItems)
+
+        toast({
+          title: "Задача архивирована",
+          description: `Задача "${taskToArchive.title}" перемещена в архив`,
+        })
+      }
+    },
+    [projects],
+  )
 
   return {
     projects,

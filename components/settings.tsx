@@ -47,12 +47,14 @@ export function Settings() {
     try {
       // Получаем все данные из localStorage
       const calendarItems = localStorage.getItem("totododo-calendar-items") || "[]"
+      const projects = localStorage.getItem("totododo-projects") || "[]"
       const archive = localStorage.getItem("totododo-archive") || "[]"
       const trash = localStorage.getItem("totododo-trash") || "[]"
 
       // Формируем объект для экспорта
       const exportData = {
         calendarItems: JSON.parse(calendarItems),
+        projects: JSON.parse(projects),
         archive: JSON.parse(archive),
         trash: JSON.parse(trash),
         exportDate: new Date().toISOString(),
@@ -97,12 +99,18 @@ export function Settings() {
         const data = JSON.parse(e.target?.result as string)
 
         // Проверяем структуру данных
-        if (!data.calendarItems || !Array.isArray(data.calendarItems)) {
+        if (!data.calendarItems && !data.projects) {
           throw new Error("Неверный формат данных")
         }
 
         // Сохраняем данные в localStorage
-        localStorage.setItem("totododo-calendar-items", JSON.stringify(data.calendarItems))
+        if (data.calendarItems && Array.isArray(data.calendarItems)) {
+          localStorage.setItem("totododo-calendar-items", JSON.stringify(data.calendarItems))
+        }
+
+        if (data.projects && Array.isArray(data.projects)) {
+          localStorage.setItem("totododo-projects", JSON.stringify(data.projects))
+        }
 
         if (data.archive && Array.isArray(data.archive)) {
           localStorage.setItem("totododo-archive", JSON.stringify(data.archive))
@@ -163,6 +171,7 @@ export function Settings() {
     if (deleteCountdown === 0) {
       // Выполняем удаление
       removeFromStorage("totododo-calendar-items")
+      removeFromStorage("totododo-projects")
       removeFromStorage("totododo-archive")
       removeFromStorage("totododo-trash")
 
@@ -321,7 +330,7 @@ export function Settings() {
           </DialogHeader>
           <div className="py-4">
             <p className="mb-4">
-              Totododo - Минималистичный трекер задач и событий для тех, кто ценит простоту и фокус на работе.
+              Totododo - минималистичный трекер задач и событий для тех, кто ценит простоту и фокус в работе.
             </p>
 
             <div className="space-y-2 mt-6">
@@ -340,7 +349,7 @@ export function Settings() {
         </DialogContent>
       </Dialog>
       <div className="mt-12 pt-8 border-t text-center">
-        <div className="text-center font-bold mb-4">Totododo v5.0</div>
+        <div className="text-center font-bold mb-4">Totododo v5.5</div>
         <Button
           variant="ghost"
           size="sm"
