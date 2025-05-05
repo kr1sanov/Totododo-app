@@ -16,6 +16,7 @@ interface CalendarTimelineProps {
   onDeleteItem: (id: string, deleteAll: boolean) => void
   forceUpdate?: boolean
   onCloseItemCard?: () => void
+  items: any[] // Add items prop to receive the latest items from parent
 }
 
 export function CalendarTimeline({
@@ -25,6 +26,7 @@ export function CalendarTimeline({
   onDeleteItem,
   forceUpdate,
   onCloseItemCard,
+  items, // Receive items from parent
 }: CalendarTimelineProps) {
   const [dates, setDates] = useState<Date[]>([])
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -34,7 +36,7 @@ export function CalendarTimeline({
   const loadMoreBottomRef = useRef<HTMLDivElement>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const { items, updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
+  const { updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
 
   // Генерируем начальные даты на 3 месяца вперед и 3 месяца назад от выбранной даты
   const generateInitialDates = useCallback(() => {
@@ -52,10 +54,10 @@ export function CalendarTimeline({
     return newDates
   }, [selectedDate])
 
-  // Инициализация дат
+  // Инициализация дат - добавляем items в зависимости, чтобы компонент обновлялся при изменении items
   useEffect(() => {
     setDates(generateInitialDates())
-  }, [generateInitialDates])
+  }, [generateInitialDates, items]) // Add items to dependencies
 
   // Загрузка дополнительных дат при прокрутке вниз
   const loadMoreDates = useCallback(() => {
@@ -259,7 +261,7 @@ export function CalendarTimeline({
                   <div className="space-y-2">
                     {dateItems.map((item) => (
                       <CalendarItemCard
-                        key={item.id}
+                        key={`${item.id}-${forceUpdate}`} // Add forceUpdate to key to force re-render
                         item={item}
                         onUpdate={updateItem}
                         onDelete={(id, deleteAll) => {

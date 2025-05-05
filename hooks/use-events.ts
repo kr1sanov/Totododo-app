@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { getFromStorage, saveToStorage } from "@/lib/storage-utils"
 
 export interface Event {
@@ -29,48 +29,89 @@ export function useEvents() {
     }
   }, [events])
 
-  const addEvent = (event: Event) => {
-    // Создаем новое событие и добавляем его к существующим
-    setEvents((prevEvents) => [...prevEvents, event])
-  }
+  const addEvent = useCallback(
+    (event: Event) => {
+      // Create a new array with the new event added
+      const updatedEvents = [...events, event]
+      // Update state immediately for optimistic UI
+      setEvents(updatedEvents)
+      // Save to localStorage
+      saveToStorage("totododo-events", updatedEvents)
 
-  const updateEvent = (updatedEvent: Event) => {
-    setEvents((prevEvents) => prevEvents.map((event) => (event.id === updatedEvent.id ? updatedEvent : event)))
-  }
+      return event
+    },
+    [events],
+  )
 
-  const deleteEvent = (id: string) => {
-    const eventToDelete = events.find((event) => event.id === id)
-    if (eventToDelete) {
+  const updateEvent = useCallback(
+    (updatedEvent: Event) => {
+      // Create a new array with the updated event
+      const updatedEvents = events.map((event) => (event.id === updatedEvent.id ? updatedEvent : event))
+      // Update state immediately for optimistic UI
+      setEvents(updatedEvents)
+      // Save to localStorage
+      saveToStorage("totododo-events", updatedEvents)
+
+      return updatedEvent
+    },
+    [events],
+  )
+
+  const deleteEvent = useCallback(
+    (id: string) => {
+      const eventToDelete = events.find((event) => event.id === id)
+      if (!eventToDelete) return null
+
+      // Create a new array without the deleted event
+      const updatedEvents = events.filter((event) => event.id !== id)
+      // Update state immediately for optimistic UI
+      setEvents(updatedEvents)
+
       // Add to trash
       const trashedItems = getFromStorage("totododo-trash", [])
-      trashedItems.push({
+      const trashItem = {
         ...eventToDelete,
         type: "events",
         deletedAt: new Date().toISOString(),
-      })
-      saveToStorage("totododo-trash", trashedItems)
+      }
+      const updatedTrash = [...trashedItems, trashItem]
 
-      // Remove from events
-      setEvents((prevEvents) => prevEvents.filter((event) => event.id !== id))
-    }
-  }
+      // Save both updates to localStorage
+      saveToStorage("totododo-events", updatedEvents)
+      saveToStorage("totododo-trash", updatedTrash)
 
-  const archiveEvent = (id: string) => {
-    const eventToArchive = events.find((event) => event.id === id)
-    if (eventToArchive) {
+      return eventToDelete
+    },
+    [events],
+  )
+
+  const archiveEvent = useCallback(
+    (id: string) => {
+      const eventToArchive = events.find((event) => event.id === id)
+      if (!eventToArchive) return null
+
+      // Create a new array without the archived event
+      const updatedEvents = events.filter((event) => event.id !== id)
+      // Update state immediately for optimistic UI
+      setEvents(updatedEvents)
+
       // Add to archive
       const archivedItems = getFromStorage("totododo-archive", [])
-      archivedItems.push({
+      const archiveItem = {
         ...eventToArchive,
         type: "events",
         archivedAt: new Date().toISOString(),
-      })
-      saveToStorage("totododo-archive", archivedItems)
+      }
+      const updatedArchive = [...archivedItems, archiveItem]
 
-      // Remove from events
-      setEvents((prevEvents) => prevEvents.filter((event) => event.id !== id))
-    }
-  }
+      // Save both updates to localStorage
+      saveToStorage("totododo-events", updatedEvents)
+      saveToStorage("totododo-archive", updatedArchive)
+
+      return eventToArchive
+    },
+    [events],
+  )
 
   return { events, addEvent, updateEvent, deleteEvent, archiveEvent }
 }

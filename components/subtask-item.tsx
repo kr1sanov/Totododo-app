@@ -36,12 +36,17 @@ export function SubtaskItem({ subtask, onUpdate, onDelete }: SubtaskItemProps) {
   )
   const [editLink, setEditLink] = useState(subtask.link || "")
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleToggleComplete = () => {
-    onUpdate({
+    // Optimistic update for completion status
+    const updatedSubtask = {
       ...subtask,
       completed: !subtask.completed,
-    })
+    }
+
+    // Call the update function immediately
+    onUpdate(updatedSubtask)
   }
 
   const handleEdit = () => {
@@ -54,19 +59,33 @@ export function SubtaskItem({ subtask, onUpdate, onDelete }: SubtaskItemProps) {
 
   const handleSave = () => {
     if (editTitle.trim()) {
-      onUpdate({
+      setIsSubmitting(true)
+
+      // Create updated subtask for optimistic update
+      const updatedSubtask = {
         ...subtask,
         title: editTitle,
         description: editDescription || undefined,
         dueDate: editDueDate?.toISOString(),
         link: editLink || undefined,
-      })
+      }
+
+      // Call the update function immediately
+      onUpdate(updatedSubtask)
+
+      // Exit edit mode
+      setIsEditing(false)
+      setIsSubmitting(false)
     }
-    setIsEditing(false)
   }
 
   const handleCancel = () => {
     setIsEditing(false)
+  }
+
+  const handleDeleteSubtask = () => {
+    // Call the delete function immediately for optimistic update
+    onDelete(subtask.id)
   }
 
   return (
@@ -133,13 +152,13 @@ export function SubtaskItem({ subtask, onUpdate, onDelete }: SubtaskItemProps) {
           </div>
 
           <div className="flex justify-end gap-2 mt-2">
-            <Button variant="ghost" size="sm" onClick={handleCancel}>
+            <Button variant="ghost" size="sm" onClick={handleCancel} disabled={isSubmitting}>
               <X className="h-4 w-4 mr-1" />
               Отмена
             </Button>
-            <Button size="sm" onClick={handleSave}>
+            <Button size="sm" onClick={handleSave} disabled={!editTitle.trim() || isSubmitting}>
               <Check className="h-4 w-4 mr-1" />
-              Сохранить
+              {isSubmitting ? "Сохранение..." : "Сохранить"}
             </Button>
           </div>
         </div>
@@ -153,7 +172,7 @@ export function SubtaskItem({ subtask, onUpdate, onDelete }: SubtaskItemProps) {
             <Button variant="ghost" size="icon" onClick={handleEdit}>
               <Pencil className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => onDelete(subtask.id)}>
+            <Button variant="ghost" size="icon" onClick={handleDeleteSubtask}>
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>

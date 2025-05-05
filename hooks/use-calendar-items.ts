@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { getFromStorage, saveToStorage } from "@/lib/storage-utils"
-import { toast } from "@/components/ui/use-toast"
 
 export interface CalendarItem {
   id: string
@@ -41,24 +40,34 @@ export function useCalendarItems() {
   }, [items, isInitialized])
 
   // Добавление нового элемента
-  const addItem = useCallback((item: CalendarItem) => {
-    setItems((prevItems) => [...prevItems, item])
+  const addItem = useCallback(
+    (item: CalendarItem) => {
+      // Create a new array with the item added for optimistic UI
+      const updatedItems = [...items, item]
+      // Update state immediately
+      setItems(updatedItems)
+      // Save to localStorage
+      saveToStorage("totododo-calendar-items", updatedItems)
 
-    toast({
-      title: `${item.type === "event" ? "Событие" : "Задача"} создана`,
-      description: `${item.type === "event" ? "Событие" : "Задача"} "${item.title}" успешно создана`,
-    })
-  }, [])
+      return item
+    },
+    [items],
+  )
 
   // Обновление существующего элемента
-  const updateItem = useCallback((updatedItem: CalendarItem) => {
-    setItems((prevItems) => prevItems.map((item) => (item.id === updatedItem.id ? updatedItem : item)))
+  const updateItem = useCallback(
+    (updatedItem: CalendarItem) => {
+      // Create a new array with the item updated for optimistic UI
+      const updatedItems = items.map((item) => (item.id === updatedItem.id ? updatedItem : item))
+      // Update state immediately
+      setItems(updatedItems)
+      // Save to localStorage
+      saveToStorage("totododo-calendar-items", updatedItems)
 
-    toast({
-      title: `${updatedItem.type === "event" ? "Событие" : "Задача"} обновлена`,
-      description: `${updatedItem.type === "event" ? "Событие" : "Задача"} "${updatedItem.title}" успешно обновлена`,
-    })
-  }, [])
+      return updatedItem
+    },
+    [items],
+  )
 
   // Удаление элемента (перемещение в корзину)
   const deleteItem = useCallback(
@@ -66,21 +75,23 @@ export function useCalendarItems() {
       const itemToDelete = items.find((item) => item.id === id)
 
       if (itemToDelete) {
-        // Оптимистичное обновление UI
+        let updatedItems
+
         if (deleteAll && itemToDelete.repeatType !== "none") {
-          // Удаляем все повторяющиеся элементы
-          setItems((prevItems) =>
-            prevItems.filter(
-              (item) =>
-                !(
-                  item.title === itemToDelete.title &&
-                  item.repeatType === itemToDelete.repeatType &&
-                  item.type === itemToDelete.type
-                ),
-            ),
+          // Delete all recurring items - create a new array for optimistic UI
+          updatedItems = items.filter(
+            (item) =>
+              !(
+                item.title === itemToDelete.title &&
+                item.repeatType === itemToDelete.repeatType &&
+                item.type === itemToDelete.type
+              ),
           )
 
-          // Добавляем в корзину все повторяющиеся элементы
+          // Update state immediately
+          setItems(updatedItems)
+
+          // Add to trash all recurring items
           const itemsToDelete = items.filter(
             (item) =>
               item.title === itemToDelete.title &&
@@ -89,8 +100,10 @@ export function useCalendarItems() {
           )
 
           const trashedItems = getFromStorage("totododo-trash", [])
+          const updatedTrash = [...trashedItems]
+
           itemsToDelete.forEach((item) => {
-            trashedItems.push({
+            updatedTrash.push({
               id: item.id,
               title: item.title,
               type: item.type,
@@ -98,33 +111,38 @@ export function useCalendarItems() {
               item: item,
             })
           })
-          saveToStorage("totododo-trash", trashedItems)
 
-          toast({
-            title: "Элементы удалены",
-            description: `Все повторения "${itemToDelete.title}" перемещены в корзину`,
-          })
+          // Save to localStorage
+          saveToStorage("totododo-calendar-items", updatedItems)
+          saveToStorage("totododo-trash", updatedTrash)
         } else {
-          // Удаляем только один элемент
-          setItems((prevItems) => prevItems.filter((item) => item.id !== id))
+          // Delete single item - create a new array for optimistic UI
+          updatedItems = items.filter((item) => item.id !== id)
+          // Update state immediately
+          setItems(updatedItems)
 
-          // Добавляем в корзину
+          // Add to trash
           const trashedItems = getFromStorage("totododo-trash", [])
-          trashedItems.push({
-            id: itemToDelete.id,
-            title: itemToDelete.title,
-            type: itemToDelete.type,
-            deletedAt: new Date().toISOString(),
-            item: itemToDelete,
-          })
-          saveToStorage("totododo-trash", trashedItems)
+          const updatedTrash = [
+            ...trashedItems,
+            {
+              id: itemToDelete.id,
+              title: itemToDelete.title,
+              type: itemToDelete.type,
+              deletedAt: new Date().toISOString(),
+              item: itemToDelete,
+            },
+          ]
 
-          toast({
-            title: `${itemToDelete.type === "event" ? "Событие" : "Задача"} удалена`,
-            description: `${itemToDelete.type === "event" ? "Событие" : "Задача"} "${itemToDelete.title}" перемещена в корзину`,
-          })
+          // Save to localStorage
+          saveToStorage("totododo-calendar-items", updatedItems)
+          saveToStorage("totododo-trash", updatedTrash)
         }
+
+        return itemToDelete
       }
+
+      return null
     },
     [items],
   )
@@ -135,25 +153,32 @@ export function useCalendarItems() {
       const itemToArchive = items.find((item) => item.id === id)
 
       if (itemToArchive) {
-        // Оптимистичное обновление UI
-        setItems((prevItems) => prevItems.filter((item) => item.id !== id))
+        // Create a new array without the archived item for optimistic UI
+        const updatedItems = items.filter((item) => item.id !== id)
+        // Update state immediately
+        setItems(updatedItems)
 
-        // Добавляем в архив
+        // Add to archive
         const archivedItems = getFromStorage("totododo-archive", [])
-        archivedItems.push({
-          id: itemToArchive.id,
-          title: itemToArchive.title,
-          type: itemToArchive.type,
-          archivedAt: new Date().toISOString(),
-          item: itemToArchive,
-        })
-        saveToStorage("totododo-archive", archivedItems)
+        const updatedArchive = [
+          ...archivedItems,
+          {
+            id: itemToArchive.id,
+            title: itemToArchive.title,
+            type: itemToArchive.type,
+            archivedAt: new Date().toISOString(),
+            item: itemToArchive,
+          },
+        ]
 
-        toast({
-          title: `${itemToArchive.type === "event" ? "Событие" : "Задача"} архивирована`,
-          description: `${itemToArchive.type === "event" ? "Событие" : "Задача"} "${itemToArchive.title}" перемещена в архив`,
-        })
+        // Save to localStorage
+        saveToStorage("totododo-calendar-items", updatedItems)
+        saveToStorage("totododo-archive", updatedArchive)
+
+        return itemToArchive
       }
+
+      return null
     },
     [items],
   )
@@ -164,6 +189,35 @@ export function useCalendarItems() {
       deleteItem(id, deleteAll)
     },
     [deleteItem],
+  )
+
+  // Получение элементов по дате
+  const getItemsByDate = useCallback(
+    (date: Date) => {
+      const dateString = date.toISOString().split("T")[0]
+
+      return items.filter((item) => {
+        const itemDate = new Date(item.date).toISOString().split("T")[0]
+
+        // Проверяем повторяющиеся элементы
+        if (item.repeatType !== "none") {
+          const itemDateObj = new Date(item.date)
+          const targetDate = new Date(date)
+
+          if (item.repeatType === "daily") {
+            return true
+          } else if (item.repeatType === "weekly") {
+            return itemDateObj.getDay() === targetDate.getDay()
+          } else if (item.repeatType === "monthly") {
+            return itemDateObj.getDate() === targetDate.getDate()
+          }
+        }
+
+        // Для обычных элементов проверяем точное совпадение даты
+        return itemDate === dateString
+      })
+    },
+    [items],
   )
 
   // Получение статистики
@@ -225,6 +279,7 @@ export function useCalendarItems() {
     deleteItem,
     archiveItem,
     deleteRecurringItem,
+    getItemsByDate,
     getStatistics,
   }
 }

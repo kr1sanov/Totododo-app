@@ -59,45 +59,76 @@ export function useProjects() {
     [projects],
   )
 
-  const addProject = useCallback((project: Project) => {
-    setProjects((prevProjects) => [...prevProjects, project])
-    toast({
-      title: "Проект создан",
-      description: `Проект "${project.name}" успешно создан`,
-    })
-  }, [])
+  const addProject = useCallback(
+    (project: Project) => {
+      // Create a new array with the new project for optimistic UI
+      const updatedProjects = [...projects, project]
+      // Update state immediately
+      setProjects(updatedProjects)
+      // Save to localStorage
+      saveToStorage("totododo-projects", updatedProjects)
 
-  const updateProject = useCallback((updatedProject: Project) => {
-    setProjects((prevProjects) =>
-      prevProjects.map((project) => (project.id === updatedProject.id ? updatedProject : project)),
-    )
-    toast({
-      title: "Проект обновлен",
-      description: `Проект "${updatedProject.name}" успешно обновлен`,
-    })
-  }, [])
+      toast({
+        title: "Проект создан",
+        description: `Проект "${project.name}" успешно создан`,
+      })
+
+      return project
+    },
+    [projects],
+  )
+
+  const updateProject = useCallback(
+    (updatedProject: Project) => {
+      // Create a new array with the updated project for optimistic UI
+      const updatedProjects = projects.map((project) => (project.id === updatedProject.id ? updatedProject : project))
+      // Update state immediately
+      setProjects(updatedProjects)
+      // Save to localStorage
+      saveToStorage("totododo-projects", updatedProjects)
+
+      toast({
+        title: "Проект обновлен",
+        description: `Проект "${updatedProject.name}" успешно обновлен`,
+      })
+
+      return updatedProject
+    },
+    [projects],
+  )
 
   const deleteProject = useCallback(
     (id: string) => {
       const projectToDelete = projects.find((project) => project.id === id)
       if (projectToDelete) {
-        // Оптимистичное обновление UI
-        setProjects((prevProjects) => prevProjects.filter((project) => project.id !== id))
+        // Create a new array without the deleted project for optimistic UI
+        const updatedProjects = projects.filter((project) => project.id !== id)
+        // Update state immediately
+        setProjects(updatedProjects)
 
         // Add to trash
         const trashedItems = getFromStorage("totododo-trash", [])
-        trashedItems.push({
-          ...projectToDelete,
-          type: "projects",
-          deletedAt: new Date().toISOString(),
-        })
-        saveToStorage("totododo-trash", trashedItems)
+        const updatedTrash = [
+          ...trashedItems,
+          {
+            ...projectToDelete,
+            type: "projects",
+            deletedAt: new Date().toISOString(),
+          },
+        ]
+
+        // Save to localStorage
+        saveToStorage("totododo-projects", updatedProjects)
+        saveToStorage("totododo-trash", updatedTrash)
 
         toast({
           title: "Проект удален",
           description: `Проект "${projectToDelete.name}" перемещен в корзину`,
         })
+
+        return projectToDelete
       }
+      return null
     },
     [projects],
   )
@@ -106,30 +137,42 @@ export function useProjects() {
     (id: string) => {
       const projectToArchive = projects.find((project) => project.id === id)
       if (projectToArchive) {
-        // Оптимистичное обновление UI
-        setProjects((prevProjects) => prevProjects.filter((project) => project.id !== id))
+        // Create a new array without the archived project for optimistic UI
+        const updatedProjects = projects.filter((project) => project.id !== id)
+        // Update state immediately
+        setProjects(updatedProjects)
 
         // Add to archive
         const archivedItems = getFromStorage("totododo-archive", [])
-        archivedItems.push({
-          ...projectToArchive,
-          type: "projects",
-          archivedAt: new Date().toISOString(),
-        })
-        saveToStorage("totododo-archive", archivedItems)
+        const updatedArchive = [
+          ...archivedItems,
+          {
+            ...projectToArchive,
+            type: "projects",
+            archivedAt: new Date().toISOString(),
+          },
+        ]
+
+        // Save to localStorage
+        saveToStorage("totododo-projects", updatedProjects)
+        saveToStorage("totododo-archive", updatedArchive)
 
         toast({
           title: "Проект архивирован",
           description: `Проект "${projectToArchive.name}" перемещен в архив`,
         })
+
+        return projectToArchive
       }
+      return null
     },
     [projects],
   )
 
-  const addTask = useCallback((projectId: string, task: Task) => {
-    setProjects((prevProjects) =>
-      prevProjects.map((project) => {
+  const addTask = useCallback(
+    (projectId: string, task: Task) => {
+      // Create a new array with the task added to the project for optimistic UI
+      const updatedProjects = projects.map((project) => {
         if (project.id === projectId) {
           return {
             ...project,
@@ -137,18 +180,27 @@ export function useProjects() {
           }
         }
         return project
-      }),
-    )
+      })
 
-    toast({
-      title: "Задача создана",
-      description: `Задача "${task.title}" успешно создана`,
-    })
-  }, [])
+      // Update state immediately
+      setProjects(updatedProjects)
+      // Save to localStorage
+      saveToStorage("totododo-projects", updatedProjects)
 
-  const updateTask = useCallback((projectId: string, updatedTask: Task) => {
-    setProjects((prevProjects) =>
-      prevProjects.map((project) => {
+      toast({
+        title: "Задача создана",
+        description: `Задача "${task.title}" успешно создана`,
+      })
+
+      return task
+    },
+    [projects],
+  )
+
+  const updateTask = useCallback(
+    (projectId: string, updatedTask: Task) => {
+      // Create a new array with the updated task for optimistic UI
+      const updatedProjects = projects.map((project) => {
         if (project.id === projectId) {
           return {
             ...project,
@@ -156,14 +208,22 @@ export function useProjects() {
           }
         }
         return project
-      }),
-    )
+      })
 
-    toast({
-      title: "Задача обновлена",
-      description: `Задача "${updatedTask.title}" успешно обновлена`,
-    })
-  }, [])
+      // Update state immediately
+      setProjects(updatedProjects)
+      // Save to localStorage
+      saveToStorage("totododo-projects", updatedProjects)
+
+      toast({
+        title: "Задача обновлена",
+        description: `Задача "${updatedTask.title}" успешно обновлена`,
+      })
+
+      return updatedTask
+    },
+    [projects],
+  )
 
   const deleteTask = useCallback(
     (projectId: string, taskId: string) => {
@@ -171,34 +231,44 @@ export function useProjects() {
       const taskToDelete = project?.tasks.find((t) => t.id === taskId)
 
       if (project && taskToDelete) {
-        // Оптимистичное обновление UI
-        setProjects((prevProjects) =>
-          prevProjects.map((p) => {
-            if (p.id === projectId) {
-              return {
-                ...p,
-                tasks: p.tasks.filter((t) => t.id !== taskId),
-              }
+        // Create a new array without the deleted task for optimistic UI
+        const updatedProjects = projects.map((p) => {
+          if (p.id === projectId) {
+            return {
+              ...p,
+              tasks: p.tasks.filter((t) => t.id !== taskId),
             }
-            return p
-          }),
-        )
+          }
+          return p
+        })
+
+        // Update state immediately
+        setProjects(updatedProjects)
 
         // Add to trash
         const trashedItems = getFromStorage("totododo-trash", [])
-        trashedItems.push({
-          ...taskToDelete,
-          projectId,
-          type: "tasks",
-          deletedAt: new Date().toISOString(),
-        })
-        saveToStorage("totododo-trash", trashedItems)
+        const updatedTrash = [
+          ...trashedItems,
+          {
+            ...taskToDelete,
+            projectId,
+            type: "tasks",
+            deletedAt: new Date().toISOString(),
+          },
+        ]
+
+        // Save to localStorage
+        saveToStorage("totododo-projects", updatedProjects)
+        saveToStorage("totododo-trash", updatedTrash)
 
         toast({
           title: "Задача удалена",
           description: `Задача "${taskToDelete.title}" перемещена в корзину`,
         })
+
+        return taskToDelete
       }
+      return null
     },
     [projects],
   )
@@ -209,34 +279,44 @@ export function useProjects() {
       const taskToArchive = project?.tasks.find((t) => t.id === taskId)
 
       if (project && taskToArchive) {
-        // Оптимистичное обновление UI
-        setProjects((prevProjects) =>
-          prevProjects.map((p) => {
-            if (p.id === projectId) {
-              return {
-                ...p,
-                tasks: p.tasks.filter((t) => t.id !== taskId),
-              }
+        // Create a new array without the archived task for optimistic UI
+        const updatedProjects = projects.map((p) => {
+          if (p.id === projectId) {
+            return {
+              ...p,
+              tasks: p.tasks.filter((t) => t.id !== taskId),
             }
-            return p
-          }),
-        )
+          }
+          return p
+        })
+
+        // Update state immediately
+        setProjects(updatedProjects)
 
         // Add to archive
         const archivedItems = getFromStorage("totododo-archive", [])
-        archivedItems.push({
-          ...taskToArchive,
-          projectId,
-          type: "tasks",
-          archivedAt: new Date().toISOString(),
-        })
-        saveToStorage("totododo-archive", archivedItems)
+        const updatedArchive = [
+          ...archivedItems,
+          {
+            ...taskToArchive,
+            projectId,
+            type: "tasks",
+            archivedAt: new Date().toISOString(),
+          },
+        ]
+
+        // Save to localStorage
+        saveToStorage("totododo-projects", updatedProjects)
+        saveToStorage("totododo-archive", updatedArchive)
 
         toast({
           title: "Задача архивирована",
           description: `Задача "${taskToArchive.title}" перемещена в архив`,
         })
+
+        return taskToArchive
       }
+      return null
     },
     [projects],
   )

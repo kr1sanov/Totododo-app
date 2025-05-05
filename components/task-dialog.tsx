@@ -24,9 +24,18 @@ interface TaskDialogProps {
   task?: Task
   projectId: string
   availableTags?: Tag[]
+  isSubmitting?: boolean
 }
 
-export function TaskDialog({ open, onOpenChange, onSubmit, task, projectId, availableTags = [] }: TaskDialogProps) {
+export function TaskDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  task,
+  projectId,
+  availableTags = [],
+  isSubmitting = false,
+}: TaskDialogProps) {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [status, setStatus] = useState<TaskStatus>("todo")
@@ -35,7 +44,7 @@ export function TaskDialog({ open, onOpenChange, onSubmit, task, projectId, avai
   const [subtasks, setSubtasks] = useState<{ id: string; title: string; completed: boolean }[]>([])
   const [newSubtask, setNewSubtask] = useState("")
   const [tags, setTags] = useState<Tag[]>([])
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
 
   useEffect(() => {
     if (task) {
@@ -59,42 +68,55 @@ export function TaskDialog({ open, onOpenChange, onSubmit, task, projectId, avai
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitting(true)
 
-    try {
-      const updatedTask: Task = {
-        id: task?.id || nanoid(),
-        title,
-        description: description || undefined,
-        status,
-        projectId,
-        createdAt: task?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        dueDate: dueDate ? dueDate.toISOString() : undefined,
-        priority,
-        subtasks: subtasks.length > 0 ? subtasks : undefined,
-        tags: tags.length > 0 ? tags : undefined,
-      }
+    if (!title.trim()) return
 
-      await onSubmit(updatedTask)
-    } finally {
-      setIsSubmitting(false)
+    const updatedTask: Task = {
+      id: task?.id || nanoid(),
+      title,
+      description: description || undefined,
+      status,
+      projectId,
+      createdAt: task?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      dueDate: dueDate ? dueDate.toISOString() : undefined,
+      priority,
+      subtasks: subtasks.length > 0 ? subtasks : undefined,
+      tags: tags.length > 0 ? tags : undefined,
     }
+
+    // Submit the task for optimistic update
+    onSubmit(updatedTask)
   }
 
   const handleAddSubtask = () => {
     if (newSubtask.trim()) {
-      setSubtasks([...subtasks, { id: nanoid(), title: newSubtask.trim(), completed: false }])
+      // Optimistic update for adding subtask
+      const updatedSubtasks = [
+        ...subtasks,
+        {
+          id: nanoid(),
+          title: newSubtask.trim(),
+          completed: false,
+        },
+      ]
+
+      setSubtasks(updatedSubtasks)
       setNewSubtask("")
     }
   }
 
   const handleUpdateSubtask = (id: string, completed: boolean) => {
-    setSubtasks(subtasks.map((subtask) => (subtask.id === id ? { ...subtask, completed } : subtask)))
+    // Optimistic update for updating subtask
+    const updatedSubtasks = subtasks.map((subtask) => (subtask.id === id ? { ...subtask, completed } : subtask))
+
+    setSubtasks(updatedSubtasks)
   }
 
   const handleRemoveSubtask = (id: string) => {
-    setSubtasks(subtasks.filter((subtask) => subtask.id !== id))
+    // Optimistic update for removing subtask
+    const updatedSubtasks = subtasks.filter((subtask) => subtask.id !== id)
+    setSubtasks(updatedSubtasks)
   }
 
   return (
@@ -169,7 +191,7 @@ export function TaskDialog({ open, onOpenChange, onSubmit, task, projectId, avai
             <label htmlFor="dueDate" className="text-sm font-medium">
               Due Date
             </label>
-            <Popover>
+            <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
               <PopoverTrigger asChild>
                 <Button variant="outline" className="w-full justify-start text-left h-10" id="dueDate">
                   <CalendarIcon className="mr-2 h-4 w-4" />
@@ -177,7 +199,15 @@ export function TaskDialog({ open, onOpenChange, onSubmit, task, projectId, avai
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
-                <Calendar mode="single" selected={dueDate} onSelect={setDueDate} initialFocus />
+                <Calendar
+                  mode="single"
+                  selected={dueDate}
+                  onSelect={(date) => {
+                    setDueDate(date)
+                    setIsCalendarOpen(false)
+                  }}
+                  initialFocus
+                />
               </PopoverContent>
             </Popover>
           </div>
@@ -194,8 +224,11 @@ export function TaskDialog({ open, onOpenChange, onSubmit, task, projectId, avai
                 <SubtaskItem
                   key={subtask.id}
                   subtask={subtask}
-                  onUpdate={handleUpdateSubtask}
-                  onRemove={handleRemoveSubtask}
+                  onUpdate={(updatedSubtask) => {
+                    const updatedSubtasks = subtasks.map((st) => (st.id === updatedSubtask.id ? updatedSubtask : st))
+                    setSubtasks(updatedSubtasks)
+                  }}
+                  onDelete={handleRemoveSubtask}
                 />
               ))}
               <div className="flex gap-2">
@@ -225,7 +258,13 @@ export function TaskDialog({ open, onOpenChange, onSubmit, task, projectId, avai
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-10">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="h-10"
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={!title.trim() || isSubmitting} className="h-10">

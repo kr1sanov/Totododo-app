@@ -47,6 +47,7 @@ interface CalendarItemCardProps {
 export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, onClose }: CalendarItemCardProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false) // Add loading state
   const router = useRouter()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [scrollPosition, setScrollPosition] = useState(0)
@@ -69,9 +70,19 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
   const toggleTaskCompletion = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (item.type === "task") {
-      onUpdate({
+      // Create a new item object with the updated completed status
+      const updatedItem = {
         ...item,
         completed: !item.completed,
+      }
+
+      // Update immediately for optimistic UI
+      onUpdate(updatedItem)
+
+      // Show toast notification
+      toast({
+        title: updatedItem.completed ? "Задача выполнена" : "Задача не выполнена",
+        description: "Статус задачи обновлен",
       })
     }
   }
@@ -89,12 +100,61 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
   }
 
   const handleDelete = () => {
-    if (item.repeatType !== "none") {
-      setIsDeleteDialogOpen(true)
-    } else {
-      onDelete(item.id)
+    if (isSubmitting) return // Prevent multiple clicks
+
+    setIsSubmitting(true)
+
+    try {
+      if (item.repeatType !== "none") {
+        setIsDeleteDialogOpen(true)
+        setIsSubmitting(false)
+      } else {
+        // Delete immediately for optimistic UI
+        onDelete(item.id)
+        setIsSheetOpen(false)
+        onClose && onClose()
+
+        // Show toast notification
+        toast({
+          title: "Элемент удален",
+          description: "Элемент успешно удален",
+        })
+      }
+    } catch (error) {
+      console.error("Error deleting item:", error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить элемент",
+        variant: "destructive",
+      })
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleArchive = () => {
+    if (isSubmitting) return // Prevent multiple clicks
+
+    setIsSubmitting(true)
+
+    try {
+      // Archive immediately for optimistic UI
+      onArchive(item.id)
       setIsSheetOpen(false)
-      onClose()
+      onClose && onClose()
+
+      // Show toast notification
+      toast({
+        title: "Элемент архивирован",
+        description: "Элемент успешно перемещен в архив",
+      })
+    } catch (error) {
+      console.error("Error archiving item:", error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось архивировать элемент",
+        variant: "destructive",
+      })
+      setIsSubmitting(false)
     }
   }
 
@@ -179,8 +239,7 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
                     <DropdownMenuItem onClick={() => onEdit(item)}>Изменить</DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
-                        onArchive(item.id)
-                        onClose()
+                        handleArchive()
                       }}
                     >
                       Архивировать
@@ -340,9 +399,19 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
                   variant={item.completed ? "outline" : "default"}
                   className="flex-shrink-0 py-7 text-base min-w-[140px]"
                   onClick={() => {
-                    onUpdate({ ...item, completed: !item.completed })
+                    // Create a new item object with the updated completed status
+                    const updatedItem = { ...item, completed: !item.completed }
+                    // Update immediately for optimistic UI
+                    onUpdate(updatedItem)
                     onClose()
+
+                    // Show toast notification
+                    toast({
+                      title: updatedItem.completed ? "Задача выполнена" : "Задача не выполнена",
+                      description: "Статус задачи обновлен",
+                    })
                   }}
+                  disabled={isSubmitting}
                 >
                   {item.completed ? "Не выполнено" : "Выполнено"}
                 </Button>
@@ -355,6 +424,7 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
                   setIsSheetOpen(false)
                   onEdit(item)
                 }}
+                disabled={isSubmitting}
               >
                 <Pencil className="h-6 w-6" />
                 <span className="ml-2">Редактировать</span>
@@ -363,15 +433,19 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
                 variant="outline"
                 size="lg"
                 className="p-7 flex-shrink-0"
-                onClick={() => {
-                  onArchive(item.id)
-                  handleCloseSheet()
-                }}
+                onClick={handleArchive}
+                disabled={isSubmitting}
               >
                 <Archive className="h-6 w-6" />
                 <span className="ml-2">Архивировать</span>
               </Button>
-              <Button variant="destructive" size="lg" className="p-7 flex-shrink-0" onClick={handleDelete}>
+              <Button
+                variant="destructive"
+                size="lg"
+                className="p-7 flex-shrink-0"
+                onClick={handleDelete}
+                disabled={isSubmitting}
+              >
                 <Trash className="h-6 w-6" />
                 <span className="ml-2">Удалить</span>
               </Button>
@@ -399,7 +473,14 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
                 setIsDeleteDialogOpen(false)
                 setIsSheetOpen(false)
                 onClose()
+
+                // Show toast notification
+                toast({
+                  title: "Элемент удален",
+                  description: "Элемент успешно удален",
+                })
               }}
+              disabled={isSubmitting}
             >
               Только этот элемент
             </Button>
@@ -410,7 +491,14 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
                 setIsDeleteDialogOpen(false)
                 setIsSheetOpen(false)
                 onClose()
+
+                // Show toast notification
+                toast({
+                  title: "Все повторения удалены",
+                  description: "Все повторяющиеся элементы успешно удалены",
+                })
               }}
+              disabled={isSubmitting}
             >
               Все повторения
             </Button>

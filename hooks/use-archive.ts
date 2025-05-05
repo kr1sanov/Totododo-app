@@ -1,52 +1,102 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { getFromStorage, saveToStorage } from "@/lib/storage-utils"
-import type { StoredItem } from "@/types"
+
+export interface ArchivedItem {
+  id: string
+  title: string
+  type: string
+  archivedAt: string
+  item: any
+}
 
 export function useArchive() {
-  const [archivedItems, setArchivedItems] = useState<StoredItem[]>([])
+  const [archivedItems, setArchivedItems] = useState<ArchivedItem[]>([])
+  const [isInitialized, setIsInitialized] = useState(false)
 
+  // Load archived items from localStorage
   useEffect(() => {
-    // Загружаем архивированные элементы из localStorage
     const storedItems = getFromStorage("totododo-archive", [])
     setArchivedItems(storedItems)
+    setIsInitialized(true)
   }, [])
 
-  const restoreItem = (id: string) => {
-    const itemToRestore = archivedItems.find((item) => item.id === id)
-
-    if (itemToRestore) {
-      // Восстанавливаем элемент в основной список
-      const calendarItems = getFromStorage("totododo-calendar-items", [])
-      calendarItems.push(itemToRestore.item)
-      saveToStorage("totododo-calendar-items", calendarItems)
-
-      // Удаляем из архива
-      const updatedItems = archivedItems.filter((item) => item.id !== id)
-      setArchivedItems(updatedItems)
-      saveToStorage("totododo-archive", updatedItems)
+  // Save archived items to localStorage when they change
+  useEffect(() => {
+    if (isInitialized) {
+      saveToStorage("totododo-archive", archivedItems)
     }
+  }, [archivedItems, isInitialized])
+
+  // Restore an item from archive
+  const restoreItem = useCallback(
+    (id: string) => {
+      const itemToRestore = archivedItems.find((item) => item.id === id)
+
+      if (itemToRestore) {
+        // Optimistic update - remove from archive immediately
+        const updatedArchivedItems = archivedItems.filter((item) => item.id !== id)
+        setArchivedItems(updatedArchivedItems)
+
+        // Restore to original location based on type
+        if (itemToRestore.type === "projects") {
+          const projects = getFromStorage("totododo-projects", [])
+          const updatedProjects = [...projects, itemToRestore.item]
+          saveToStorage("totododo-projects", updatedProjects)
+        } else if (itemToRestore.type === "tasks") {
+          const projects = getFromStorage("totododo-projects", [])
+          const updatedProjects = projects.map((project: any) => {
+            if (project.id === itemToRestore.item.projectId) {
+              return {
+                ...project,
+                tasks: [...project.tasks, itemToRestore.item],
+              }
+            }
+            return project
+          })
+          saveToStorage("totododo-projects", updatedProjects)
+        } else if (itemToRestore.type === "event" || itemToRestore.type === "task") {
+          const calendarItems = getFromStorage("totododo-calendar-items", [])
+          const updatedCalendarItems = [...calendarItems, itemToRestore.item]
+          saveToStorage("totododo-calendar-items", updatedCalendarItems)
+        }
+
+        // Save updated archive
+        saveToStorage("totododo-archive", updatedArchivedItems)
+
+        return itemToRestore
+      }
+
+      return null
+    },
+    [archivedItems],
+  )
+
+  // Delete an item permanently from archive
+  const deleteItem = useCallback(
+    (id: string) => {
+      const itemToDelete = archivedItems.find((item) => item.id === id)
+
+      if (itemToDelete) {
+        // Optimistic update - remove from archive immediately
+        const updatedArchivedItems = archivedItems.filter((item) => item.id !== id)
+        setArchivedItems(updatedArchivedItems)
+
+        // Save updated archive
+        saveToStorage("totododo-archive", updatedArchivedItems)
+
+        return itemToDelete
+      }
+
+      return null
+    },
+    [archivedItems],
+  )
+
+  return {
+    archivedItems,
+    restoreItem,
+    deleteItem,
   }
-
-  const deleteItem = (id: string) => {
-    const itemToDelete = archivedItems.find((item) => item.id === id)
-
-    if (itemToDelete) {
-      // Добавляем в корзину
-      const trashedItems = getFromStorage("totododo-trash", [])
-      trashedItems.push({
-        ...itemToDelete,
-        deletedAt: new Date().toISOString(),
-      })
-      saveToStorage("totododo-trash", trashedItems)
-
-      // Удаляем из архива
-      const updatedItems = archivedItems.filter((item) => item.id !== id)
-      setArchivedItems(updatedItems)
-      saveToStorage("totododo-archive", updatedItems)
-    }
-  }
-
-  return { archivedItems, restoreItem, deleteItem }
 }

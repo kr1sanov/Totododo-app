@@ -10,7 +10,6 @@ import { BackButton } from "@/components/back-button"
 import type { Task, TaskStatus, Tag } from "@/types"
 import { TaskFilter } from "@/components/task-filter"
 import { useToast } from "@/hooks/use-toast"
-import { Skeleton } from "@/components/ui/skeleton"
 import { ProjectStatistics } from "@/components/project-statistics"
 
 interface ProjectDetailsProps {
@@ -18,24 +17,30 @@ interface ProjectDetailsProps {
 }
 
 export function ProjectDetails({ projectId }: ProjectDetailsProps) {
-  const { projects, tasks, isLoading, addTask, updateTask, deleteTask, archiveTask } = useProjects()
+  const { projects, getProject, addTask, updateTask, deleteTask, archiveTask } = useProjects()
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const { toast } = useToast()
 
-  const project = projects.find((p) => p.id === projectId)
-  const projectTasks = tasks.filter(
-    (task) =>
-      task.projectId === projectId &&
-      !task.isArchived &&
-      !task.isDeleted &&
-      (statusFilter === null || task.status === statusFilter),
-  )
+  const project = getProject(projectId)
+
+  // If project doesn't exist, show loading or not found message
+  if (!project) {
+    return (
+      <div className="p-4">
+        <BackButton />
+        <div className="mt-4">Проект не найден</div>
+      </div>
+    )
+  }
+
+  const filteredTasks = project.tasks.filter((task) => statusFilter === null || task.status === statusFilter)
 
   // Collect all unique tags from tasks
-  const allTags = tasks
-    .filter((task) => task.projectId === projectId && task.tags && task.tags.length > 0)
+  const allTags = project.tasks
+    .filter((task) => task.tags && task.tags.length > 0)
     .flatMap((task) => task.tags || [])
     .reduce((unique: Tag[], tag) => {
       if (!unique.some((t) => t.id === tag.id)) {
@@ -45,50 +50,49 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
     }, [])
 
   const handleCreateTask = async (task: Task) => {
+    setIsSubmitting(true)
+
     try {
-      await addTask(task)
-      toast({
-        title: "Task created",
-        description: "Your task has been created successfully.",
-      })
+      // Add task with optimistic update
+      await addTask(projectId, task)
       setIsTaskDialogOpen(false)
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to create task. Please try again.",
+        title: "Ошибка",
+        description: "Не удалось создать задачу. Пожалуйста, попробуйте снова.",
         variant: "destructive",
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   const handleUpdateTask = async (task: Task) => {
+    setIsSubmitting(true)
+
     try {
-      await updateTask(task)
-      toast({
-        title: "Task updated",
-        description: "Your task has been updated successfully.",
-      })
+      // Update task with optimistic update
+      await updateTask(projectId, task)
       setEditingTask(null)
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to update task. Please try again.",
+        title: "Ошибка",
+        description: "Не удалось обновить задачу. Пожалуйста, попробуйте снова.",
         variant: "destructive",
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   const handleDeleteTask = async (taskId: string) => {
     try {
-      await deleteTask(taskId)
-      toast({
-        title: "Task deleted",
-        description: "Your task has been moved to trash.",
-      })
+      // Delete task with optimistic update
+      await deleteTask(projectId, taskId)
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to delete task. Please try again.",
+        title: "Ошибка",
+        description: "Не удалось удалить задачу. Пожалуйста, попробуйте снова.",
         variant: "destructive",
       })
     }
@@ -96,15 +100,12 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
 
   const handleArchiveTask = async (taskId: string) => {
     try {
-      await archiveTask(taskId)
-      toast({
-        title: "Task archived",
-        description: "Your task has been archived.",
-      })
+      // Archive task with optimistic update
+      await archiveTask(projectId, taskId)
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to archive task. Please try again.",
+        title: "Ошибка",
+        description: "Не удалось архивировать задачу. Пожалуйста, попробуйте снова.",
         variant: "destructive",
       })
     }
@@ -114,25 +115,17 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
     setEditingTask(task)
   }
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4 p-4">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-10 w-10 rounded-full" />
-        </div>
-        <Skeleton className="h-24 w-full" />
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-24 w-full" />
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  if (!project) {
-    return <div className="p-4">Project not found</div>
+  const handleStatusChange = async (task: Task, status: TaskStatus) => {
+    try {
+      // Update task status with optimistic update
+      await updateTask(projectId, { ...task, status })
+    } catch (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось изменить статус задачи. Пожалуйста, попробуйте снова.",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
@@ -160,20 +153,21 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
       <ProjectStatistics projectId={projectId} />
 
       <div className="space-y-3">
-        {projectTasks.length > 0 ? (
-          projectTasks.map((task) => (
+        {filteredTasks.length > 0 ? (
+          filteredTasks.map((task) => (
             <TaskCard
               key={task.id}
               task={task}
+              projectId={projectId}
               onEdit={() => handleEditTask(task)}
               onDelete={() => handleDeleteTask(task.id)}
               onArchive={() => handleArchiveTask(task.id)}
-              onStatusChange={(status) => handleUpdateTask({ ...task, status })}
+              onStatusChange={(status) => handleStatusChange(task, status)}
             />
           ))
         ) : (
           <div className="text-center py-8 text-muted-foreground">
-            {statusFilter ? `No ${statusFilter} tasks found` : "No tasks yet. Create your first task!"}
+            {statusFilter ? `Нет задач со статусом ${statusFilter}` : "Нет задач. Создайте свою первую задачу!"}
           </div>
         )}
       </div>
@@ -184,6 +178,7 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
         onSubmit={handleCreateTask}
         projectId={projectId}
         availableTags={allTags}
+        isSubmitting={isSubmitting}
       />
 
       {editingTask && (
@@ -194,6 +189,7 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
           task={editingTask}
           projectId={projectId}
           availableTags={allTags}
+          isSubmitting={isSubmitting}
         />
       )}
     </div>

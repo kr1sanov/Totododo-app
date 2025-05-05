@@ -10,22 +10,64 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useProjects } from "@/hooks/use-projects"
+import { useToast } from "@/components/ui/use-toast"
 
 export function ProjectsList() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [projectName, setProjectName] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const { projects, addProject, deleteProject, archiveProject } = useProjects()
+  const { toast } = useToast()
 
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
     if (projectName.trim()) {
-      addProject({
-        id: Date.now().toString(),
-        name: projectName,
-        tasks: [],
-        createdAt: new Date().toISOString(),
+      setIsSubmitting(true)
+
+      try {
+        // Create new project with optimistic update
+        await addProject({
+          id: Date.now().toString(),
+          name: projectName,
+          tasks: [],
+          createdAt: new Date().toISOString(),
+        })
+
+        // Reset form and close dialog
+        setProjectName("")
+        setIsDialogOpen(false)
+      } catch (error) {
+        toast({
+          title: "Ошибка",
+          description: "Не удалось создать проект. Пожалуйста, попробуйте снова.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsSubmitting(false)
+      }
+    }
+  }
+
+  const handleDeleteProject = async (id: string, name: string) => {
+    try {
+      await deleteProject(id)
+    } catch (error) {
+      toast({
+        title: "Ошибка",
+        description: `Не удалось удалить проект "${name}". Пожалуйста, попробуйте снова.`,
+        variant: "destructive",
       })
-      setProjectName("")
-      setIsDialogOpen(false)
+    }
+  }
+
+  const handleArchiveProject = async (id: string, name: string) => {
+    try {
+      await archiveProject(id)
+    } catch (error) {
+      toast({
+        title: "Ошибка",
+        description: `Не удалось архивировать проект "${name}". Пожалуйста, попробуйте снова.`,
+        variant: "destructive",
+      })
     }
   }
 
@@ -54,8 +96,13 @@ export function ProjectsList() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem>Изменить</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => archiveProject(project.id)}>Архивировать</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => deleteProject(project.id)} className="text-destructive">
+                      <DropdownMenuItem onClick={() => handleArchiveProject(project.id, project.name)}>
+                        Архивировать
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleDeleteProject(project.id, project.name)}
+                        className="text-destructive"
+                      >
                         Удалить
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -95,10 +142,12 @@ export function ProjectsList() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
               Отменить
             </Button>
-            <Button onClick={handleCreateProject}>Создать</Button>
+            <Button onClick={handleCreateProject} disabled={!projectName.trim() || isSubmitting}>
+              {isSubmitting ? "Создание..." : "Создать"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

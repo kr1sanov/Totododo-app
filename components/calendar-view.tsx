@@ -21,8 +21,7 @@ export function CalendarView() {
   const [selectedType, setSelectedType] = useState<"event" | "task" | null>(null)
   const [selectedItem, setSelectedItem] = useState<any | null>(null)
   const { today, goToToday } = useToday()
-  const { items, addItem, updateItem, deleteItem, archiveItem, deleteRecurringItem, getItemsByDate } =
-    useCalendarItems()
+  const { items, addItem, updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
   const [forceUpdate, setForceUpdate] = useState(false)
   const [currentMonthLabel, setCurrentMonthLabel] = useState("")
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -92,36 +91,44 @@ export function CalendarView() {
   const handleSaveItem = useCallback(
     (item: any) => {
       if (selectedItem) {
-        // Оптимистичное обновление при редактировании
+        // Create a copy of the item to avoid reference issues
         const updatedItem = { ...item }
+        // Update state immediately for optimistic UI
         updateItem(updatedItem)
+
         toast({
           title: `${item.type === "event" ? "Событие" : "Задача"} обновлена`,
           description: "Изменения успешно сохранены",
         })
       } else {
-        // Оптимистичное обновление при создании
+        // Create a copy of the item with a new ID for optimistic UI
         const newItem = { ...item, id: Date.now().toString() }
+        // Add to state immediately
         addItem(newItem)
+
         toast({
           title: `${item.type === "event" ? "Событие" : "Задача"} создана`,
           description: "Элемент успешно добавлен в календарь",
         })
       }
-      // Немедленно обновляем интерфейс
+      // Force update the UI immediately
       setForceUpdate((prev) => !prev)
     },
     [selectedItem, addItem, updateItem],
   )
 
-  // Оптимистичное обновление при удалении элемента
+  // Update the handleDeleteItem function:
   const handleDeleteItem = useCallback(
     (id: string, deleteAll = false) => {
+      // Delete immediately for optimistic UI
       deleteItem(id, deleteAll)
+
       toast({
         title: "Элемент удален",
         description: "Элемент успешно удален из календаря",
       })
+
+      // Force update the UI immediately
       setForceUpdate((prev) => !prev)
     },
     [deleteItem],
@@ -182,6 +189,7 @@ export function CalendarView() {
           onDeleteItem={handleDeleteItem}
           forceUpdate={forceUpdate}
           onCloseItemCard={handleCloseItemCard}
+          items={items} // Pass items to CalendarTimeline
         />
       </div>
 

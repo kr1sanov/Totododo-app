@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { format } from "date-fns"
@@ -10,13 +12,16 @@ import { MoreHorizontal, Calendar, MapPin, Clock, ArrowLeft, Pencil, Trash } fro
 import { useEvents } from "@/hooks/use-events"
 import { ru } from "date-fns/locale"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { toast } from "@/components/ui/use-toast"
 
 interface EventCardProps {
   event: Event
+  onClose?: () => void
 }
 
-export function EventCard({ event }: EventCardProps) {
+export function EventCard({ event, onClose }: EventCardProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false) // Add loading state
   const { deleteEvent, archiveEvent } = useEvents()
 
   const startDate = new Date(event.startDate)
@@ -28,6 +33,62 @@ export function EventCard({ event }: EventCardProps) {
 
   const formatFullDate = (date: Date) => {
     return format(date, "d MMMM yyyy", { locale: ru })
+  }
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation()
+
+    if (isSubmitting) return // Prevent multiple clicks
+
+    setIsSubmitting(true)
+
+    try {
+      // Delete immediately for optimistic UI
+      deleteEvent(event.id)
+      onClose && onClose()
+
+      // Show toast notification
+      toast({
+        title: "Событие удалено",
+        description: "Событие успешно удалено",
+      })
+    } catch (error) {
+      console.error("Error deleting event:", error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить событие",
+        variant: "destructive",
+      })
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleArchive = (e: React.MouseEvent) => {
+    e.stopPropagation()
+
+    if (isSubmitting) return // Prevent multiple clicks
+
+    setIsSubmitting(true)
+
+    try {
+      // Archive immediately for optimistic UI
+      archiveEvent(event.id)
+      onClose && onClose()
+
+      // Show toast notification
+      toast({
+        title: "Событие архивировано",
+        description: "Событие успешно перемещено в архив",
+      })
+    } catch (error) {
+      console.error("Error archiving event:", error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось архивировать событие",
+        variant: "destructive",
+      })
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -53,8 +114,8 @@ export function EventCard({ event }: EventCardProps) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                     <DropdownMenuItem onClick={() => setIsDialogOpen(true)}>Изменить</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => archiveEvent(event.id)}>Архивировать</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => deleteEvent(event.id)} className="text-destructive">
+                    <DropdownMenuItem onClick={handleArchive}>Архивировать</DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDelete} className="text-destructive">
                       Удалить
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -127,11 +188,16 @@ export function EventCard({ event }: EventCardProps) {
             )}
 
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setIsDialogOpen(true)}>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setIsDialogOpen(true)}
+                disabled={isSubmitting}
+              >
                 <Pencil className="h-4 w-4 mr-2" />
                 Редактировать
               </Button>
-              <Button variant="destructive" size="icon" onClick={() => deleteEvent(event.id)}>
+              <Button variant="destructive" size="icon" onClick={handleDelete} disabled={isSubmitting}>
                 <Trash className="h-4 w-4" />
               </Button>
             </div>
