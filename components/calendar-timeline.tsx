@@ -18,6 +18,7 @@ interface CalendarTimelineProps {
   onCloseItemCard?: () => void
   items: any[]
   onMonthChange?: (monthLabel: string) => void
+  onArchiveItem?: (id: string) => void
 }
 
 export function CalendarTimeline({
@@ -29,6 +30,7 @@ export function CalendarTimeline({
   onCloseItemCard,
   items,
   onMonthChange,
+  onArchiveItem,
 }: CalendarTimelineProps) {
   const [dates, setDates] = useState<Date[]>([])
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -317,6 +319,18 @@ export function CalendarTimeline({
   // Используем пустую функцию как fallback для onClose, чтобы избежать ошибок
   const emptyOnClose = () => {}
 
+  // Обработчик архивирования
+  const handleArchive = useCallback(
+    (id: string) => {
+      if (onArchiveItem) {
+        onArchiveItem(id)
+      } else {
+        archiveItem(id)
+      }
+    },
+    [onArchiveItem, archiveItem],
+  )
+
   return (
     <div
       className="flex flex-col divide-y"
@@ -370,7 +384,7 @@ export function CalendarTimeline({
                             onDeleteItem(id, false)
                           }
                         }}
-                        onArchive={archiveItem}
+                        onArchive={handleArchive}
                         onEdit={onEditItem}
                         onClose={onCloseItemCard || emptyOnClose}
                       />
