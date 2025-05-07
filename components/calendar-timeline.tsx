@@ -16,7 +16,8 @@ interface CalendarTimelineProps {
   onDeleteItem: (id: string, deleteAll: boolean) => void
   forceUpdate?: boolean
   onCloseItemCard?: () => void
-  items: any[] // Add items prop to receive the latest items from parent
+  items: any[]
+  onMonthChange?: (monthLabel: string) => void
 }
 
 export function CalendarTimeline({
@@ -26,7 +27,8 @@ export function CalendarTimeline({
   onDeleteItem,
   forceUpdate,
   onCloseItemCard,
-  items, // Receive items from parent
+  items,
+  onMonthChange,
 }: CalendarTimelineProps) {
   const [dates, setDates] = useState<Date[]>([])
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -35,13 +37,16 @@ export function CalendarTimeline({
   const loadMoreTopRef = useRef<HTMLDivElement>(null)
   const loadMoreBottomRef = useRef<HTMLDivElement>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const isInitialScrollRef = useRef(true)
+  const lastVisibleMonthRef = useRef("")
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const { updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
 
-  // Генерируем начальные даты на 3 месяца вперед и 3 месяца назад от выбранной даты
+  // Генерируем начальные даты на 6 месяцев вперед и 6 месяцев назад от выбранной даты
   const generateInitialDates = useCallback(() => {
-    const startDate = subMonths(selectedDate, 3)
-    const endDate = addMonths(selectedDate, 3)
+    const startDate = subMonths(selectedDate, 6)
+    const endDate = addMonths(selectedDate, 6)
 
     const newDates = []
     let currentDate = new Date(startDate)
@@ -54,12 +59,12 @@ export function CalendarTimeline({
     return newDates
   }, [selectedDate])
 
-  // Инициализация дат - добавляем items в зависимости, чтобы компонент обновлялся при изменении items
+  // Инициализация дат
   useEffect(() => {
     setDates(generateInitialDates())
-  }, [generateInitialDates, items]) // Add items to dependencies
+  }, [generateInitialDates])
 
-  // Загрузка дополнительных дат при прокрутке вниз
+  // Загрузка дополнительных дат при прокрутке вниз (будущие даты)
   const loadMoreDates = useCallback(() => {
     if (isLoading) return
 
@@ -67,6 +72,8 @@ export function CalendarTimeline({
 
     setTimeout(() => {
       setDates((prevDates) => {
+        if (prevDates.length === 0) return generateInitialDates()
+
         const lastDate = prevDates[prevDates.length - 1]
         const newDates = []
 
@@ -81,9 +88,9 @@ export function CalendarTimeline({
 
       setIsLoading(false)
     }, 300)
-  }, [isLoading])
+  }, [isLoading, generateInitialDates])
 
-  // Загрузка дополнительных дат при прокрутке вверх
+  // Загрузка дополнительных дат при прокрутке вверх (прошлые даты)
   const loadPreviousDates = useCallback(() => {
     if (isLoading) return
 
@@ -91,6 +98,8 @@ export function CalendarTimeline({
 
     setTimeout(() => {
       setDates((prevDates) => {
+        if (prevDates.length === 0) return generateInitialDates()
+
         const firstDate = prevDates[0]
         const newDates = []
 
@@ -116,7 +125,7 @@ export function CalendarTimeline({
 
       setIsLoading(false)
     }, 300)
-  }, [isLoading])
+  }, [isLoading, generateInitialDates])
 
   // Настройка Intersection Observer для бесконечной прокрутки вниз
   useEffect(() => {
@@ -164,23 +173,106 @@ export function CalendarTimeline({
     }
   }, [loadPreviousDates, isLoading])
 
-  // Прокрутка к выбранной дате
+  // Обновление видимого месяца при прокрутке
   useEffect(() => {
-    const dateIndex = dates.findIndex((date) => isSameDay(date, selectedDate))
+    if (!timelineRef.current || !onMonthChange) return
 
-    if (dateIndex !== -1) {
-      // Прокрутка к выбранной дате с небольшой задержкой
-      setTimeout(() => {
-        const element = document.getElementById(`date-${selectedDate.toISOString().split("T")[0]}`)
-        if (element && timelineRef.current) {
-          timelineRef.current.scrollTo({
-            top: element.offsetTop - 100,
-            behavior: "smooth",
-          })
+    const handleScroll = () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+
+      scrollTimeoutRef.current = setTimeout(() => {
+        if (!timelineRef.current) return
+
+        // Находим все заголовки месяцев
+        const monthHeaders = document.querySelectorAll("[data-month-header]")
+        if (monthHeaders.length === 0) return
+
+        // Определяем видимую область
+        const scrollTop = timelineRef.current.scrollTop
+        const clientHeight = timelineRef.current.clientHeight
+        const viewportMiddle = scrollTop + clientHeight / 2
+
+        // Находим ближайший к центру экрана заголовок месяца
+        let closestHeader: Element | null = null
+        let minDistance = Number.POSITIVE_INFINITY
+
+        monthHeaders.forEach((header) => {
+          const rect = header.getBoundingClientRect()
+          const headerMiddle = rect.top + rect.height / 2 + scrollTop - timelineRef.current!.offsetTop
+          const distance = Math.abs(headerMiddle - viewportMiddle)
+
+          if (distance < minDistance) {
+            closestHeader = header
+            minDistance = distance
+          }
+        })
+
+        if (closestHeader) {
+          const monthLabel = closestHeader.getAttribute("data-month-label")
+          if (monthLabel && monthLabel !== lastVisibleMonthRef.current) {
+            lastVisibleMonthRef.current = monthLabel
+            onMonthChange(monthLabel)
+          }
         }
       }, 100)
     }
-  }, [selectedDate, dates])
+
+    // Добавляем обработчик скролла
+    timelineRef.current.addEventListener("scroll", handleScroll)
+
+    // Вызываем обработчик один раз после монтирования для установки начального месяца
+    setTimeout(handleScroll, 300)
+
+    return () => {
+      if (timelineRef.current) {
+        timelineRef.current.removeEventListener("scroll", handleScroll)
+      }
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+    }
+  }, [onMonthChange])
+
+  // Первоначальная прокрутка к выбранной дате
+  useEffect(() => {
+    if (dates.length > 0 && timelineRef.current && isInitialScrollRef.current) {
+      const today = new Date()
+      const todayString = today.toISOString().split("T")[0]
+      const todayElement = document.getElementById(`date-${todayString}`)
+
+      if (todayElement) {
+        setTimeout(() => {
+          if (timelineRef.current) {
+            timelineRef.current.scrollTo({
+              top: todayElement.offsetTop - 150,
+              behavior: "auto",
+            })
+            isInitialScrollRef.current = false
+          }
+        }, 100)
+      }
+    }
+  }, [dates])
+
+  // Прокрутка к новой выбранной дате
+  useEffect(() => {
+    if (dates.length > 0 && timelineRef.current && !isInitialScrollRef.current) {
+      const selectedDateString = selectedDate.toISOString().split("T")[0]
+      const selectedElement = document.getElementById(`date-${selectedDateString}`)
+
+      if (selectedElement) {
+        timelineRef.current.scrollTo({
+          top: selectedElement.offsetTop - 150,
+          behavior: "smooth",
+        })
+      } else {
+        // Если элемент не найден, значит дата не загружена. Загружаем новые даты
+        setDates(generateInitialDates())
+      }
+    }
+  }, [selectedDate, dates.length, generateInitialDates])
 
   // Получение элементов для даты
   const getItemsForDate = useCallback(
@@ -188,24 +280,31 @@ export function CalendarTimeline({
       const dateString = date.toISOString().split("T")[0]
 
       return items.filter((item) => {
-        const itemDate = new Date(item.date).toISOString().split("T")[0]
+        if (!item || !item.date) return false
 
-        // Проверяем повторяющиеся элементы
-        if (item.repeatType !== "none") {
-          const itemDateObj = new Date(item.date)
-          const targetDate = new Date(date)
+        try {
+          const itemDate = new Date(item.date).toISOString().split("T")[0]
 
-          if (item.repeatType === "daily") {
-            return true
-          } else if (item.repeatType === "weekly") {
-            return itemDateObj.getDay() === targetDate.getDay()
-          } else if (item.repeatType === "monthly") {
-            return itemDateObj.getDate() === targetDate.getDate()
+          // Проверяем повторяющиеся элементы
+          if (item.repeatType && item.repeatType !== "none") {
+            const itemDateObj = new Date(item.date)
+            const targetDate = new Date(date)
+
+            if (item.repeatType === "daily") {
+              return true
+            } else if (item.repeatType === "weekly") {
+              return itemDateObj.getDay() === targetDate.getDay()
+            } else if (item.repeatType === "monthly") {
+              return itemDateObj.getDate() === targetDate.getDate()
+            }
           }
-        }
 
-        // Для обычных элементов проверяем точное совпадение даты
-        return itemDate === dateString
+          // Для обычных элементов проверяем точное совпадение даты
+          return itemDate === dateString
+        } catch (error) {
+          console.error("Error processing item date:", error)
+          return false
+        }
       })
     },
     [items],
@@ -261,7 +360,7 @@ export function CalendarTimeline({
                   <div className="space-y-2">
                     {dateItems.map((item) => (
                       <CalendarItemCard
-                        key={`${item.id}-${forceUpdate}`} // Add forceUpdate to key to force re-render
+                        key={`${item.id}-${forceUpdate}`}
                         item={item}
                         onUpdate={updateItem}
                         onDelete={(id, deleteAll) => {
@@ -294,6 +393,7 @@ export function CalendarTimeline({
           </div>
         )
       })}
+
       <div ref={loadMoreBottomRef} className="h-20 flex items-center justify-center text-muted-foreground">
         {isLoading ? "Загрузка..." : ""}
       </div>

@@ -255,3 +255,16 @@ export function EventDialog({ isOpen, onClose, date, event }: EventDialogProps) 
     </Dialog>
   )
 }
+const { addEvent } = useEvents()
+
+const handleCreate = async () => {
+  const newEvent = {
+    id: uuidv4(),
+    title,
+    description,
+    date: selectedDate,
+  }
+
+  await addEvent(newEvent)
+  closeDialog() // закроем окно после создания
+}

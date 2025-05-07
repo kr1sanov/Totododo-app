@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useRef, useEffect } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { CalendarIcon, ChevronDown, ChevronUp, Plus } from "lucide-react"
 import { CalendarHeader } from "@/components/calendar-header"
@@ -12,6 +12,7 @@ import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { useCalendarItems } from "@/hooks/use-calendar-items"
 import { toast } from "@/components/ui/use-toast"
+import { motion, AnimatePresence } from "framer-motion"
 
 export function CalendarView() {
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false)
@@ -23,41 +24,11 @@ export function CalendarView() {
   const { today, goToToday } = useToday()
   const { items, addItem, updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
   const [forceUpdate, setForceUpdate] = useState(false)
-  const [currentMonthLabel, setCurrentMonthLabel] = useState("")
-  const timelineRef = useRef<HTMLDivElement>(null)
+  const [currentMonthLabel, setCurrentMonthLabel] = useState(format(new Date(), "LLLL yyyy", { locale: ru }))
 
-  // Обновляем текущий месяц при прокрутке
+  // Установка текущей даты при первой загрузке
   useEffect(() => {
-    const updateCurrentMonth = () => {
-      if (timelineRef.current) {
-        const monthHeaders = timelineRef.current.querySelectorAll("[data-month-header]")
-        if (monthHeaders.length === 0) return
-
-        let currentHeader = monthHeaders[0]
-        const scrollTop = timelineRef.current.scrollTop
-
-        for (let i = 0; i < monthHeaders.length; i++) {
-          const header = monthHeaders[i] as HTMLElement
-          if (header.offsetTop <= scrollTop + 100) {
-            currentHeader = header
-          } else {
-            break
-          }
-        }
-
-        setCurrentMonthLabel(currentHeader.getAttribute("data-month-label") || "")
-      }
-    }
-
-    const timelineElement = timelineRef.current
-    if (timelineElement) {
-      timelineElement.addEventListener("scroll", updateCurrentMonth)
-      updateCurrentMonth() // Инициализация
-
-      return () => {
-        timelineElement.removeEventListener("scroll", updateCurrentMonth)
-      }
-    }
+    setSelectedDate(new Date())
   }, [])
 
   const toggleCalendar = () => {
@@ -87,51 +58,104 @@ export function CalendarView() {
     setIsItemDialogOpen(true)
   }
 
+  // Callback для обновления текущего месяца при прокрутке
+  const handleMonthChange = useCallback((monthLabel: string) => {
+    setCurrentMonthLabel(monthLabel)
+  }, [])
+
   // Оптимистичное обновление при создании элемента
   const handleSaveItem = useCallback(
     (item: any) => {
-      if (selectedItem) {
-        // Create a copy of the item to avoid reference issues
-        const updatedItem = { ...item }
-        // Update state immediately for optimistic UI
-        updateItem(updatedItem)
+      try {
+        if (selectedItem) {
+          // Create a copy of the item to avoid reference issues
+          const updatedItem = { ...item }
+          // Update state immediately for optimistic UI
+          updateItem(updatedItem)
 
-        toast({
-          title: `${item.type === "event" ? "Событие" : "Задача"} обновлена`,
-          description: "Изменения успешно сохранены",
-        })
-      } else {
-        // Create a copy of the item with a new ID for optimistic UI
-        const newItem = { ...item, id: Date.now().toString() }
-        // Add to state immediately
-        addItem(newItem)
+          toast({
+            title: `${item.type === "event" ? "Событие" : "Задача"} обновлена`,
+            description: "Изменения успешно сохранены",
+          })
+        } else {
+          // Create a copy of the item with a new ID for optimistic UI
+          const newItem = { ...item, id: Date.now().toString() }
+          // Add to state immediately
+          addItem(newItem)
 
+          toast({
+            title: `${item.type === "event" ? "Событие" : "Задача"} создана`,
+            description: "Элемент успешно добавлен в календарь",
+          })
+        }
+        // Force update the UI immediately
+        setForceUpdate((prev) => !prev)
+      } catch (error) {
+        console.error("Error saving item:", error)
         toast({
-          title: `${item.type === "event" ? "Событие" : "Задача"} создана`,
-          description: "Элемент успешно добавлен в календарь",
+          title: "Ошибка",
+          description: "Не удалось сохранить элемент",
+          variant: "destructive",
         })
       }
-      // Force update the UI immediately
-      setForceUpdate((prev) => !prev)
     },
     [selectedItem, addItem, updateItem],
   )
 
-  // Update the handleDeleteItem function:
+  // Update the handleDeleteItem function
   const handleDeleteItem = useCallback(
     (id: string, deleteAll = false) => {
-      // Delete immediately for optimistic UI
-      deleteItem(id, deleteAll)
+      try {
+        // Delete immediately for optimistic UI
+        if (deleteAll) {
+          deleteRecurringItem(id, true)
+        } else {
+          deleteItem(id)
+        }
 
-      toast({
-        title: "Элемент удален",
-        description: "Элемент успешно удален из календаря",
-      })
+        toast({
+          title: "Элемент удален",
+          description: "Элемент успешно удален из календаря",
+        })
 
-      // Force update the UI immediately
-      setForceUpdate((prev) => !prev)
+        // Force update the UI immediately
+        setForceUpdate((prev) => !prev)
+      } catch (error) {
+        console.error("Error deleting item:", error)
+        toast({
+          title: "Ошибка",
+          description: "Не удалось удалить элемент",
+          variant: "destructive",
+        })
+      }
     },
-    [deleteItem],
+    [deleteItem, deleteRecurringItem],
+  )
+
+  // Обработчик архивирования
+  const handleArchiveItem = useCallback(
+    (id: string) => {
+      try {
+        // Архивируем элемент
+        archiveItem(id)
+
+        toast({
+          title: "Элемент архивирован",
+          description: "Элемент успешно перемещен в архив",
+        })
+
+        // Force update the UI immediately
+        setForceUpdate((prev) => !prev)
+      } catch (error) {
+        console.error("Error archiving item:", error)
+        toast({
+          title: "Ошибка",
+          description: "Не удалось архивировать элемент",
+          variant: "destructive",
+        })
+      }
+    },
+    [archiveItem],
   )
 
   // Функция для закрытия карточки элемента
@@ -141,20 +165,11 @@ export function CalendarView() {
   }, [])
 
   // Обработчик для кнопки "Сегодня"
-  const handleGoToToday = () => {
+  const handleGoToToday = useCallback(() => {
+    const today = new Date()
+    setSelectedDate(today)
     goToToday()
-    setSelectedDate(new Date())
-    // Прокрутка к сегодняшнему дню
-    if (timelineRef.current) {
-      const todayElement = document.getElementById(`date-${new Date().toISOString().split("T")[0]}`)
-      if (todayElement) {
-        timelineRef.current.scrollTo({
-          top: todayElement.offsetTop - 100,
-          behavior: "smooth",
-        })
-      }
-    }
-  }
+  }, [goToToday])
 
   return (
     <div className="flex flex-col">
@@ -171,25 +186,38 @@ export function CalendarView() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={handleGoToToday} className="h-12 w-12">
-              <CalendarIcon className="h-6 w-6" />
-              <span className="sr-only">Сегодня</span>
+            <Button variant="outline" size="sm" onClick={handleGoToToday} className="h-9">
+              <CalendarIcon className="h-4 w-4 mr-2" />
+              Сегодня
             </Button>
           </div>
         </div>
 
-        {isCalendarExpanded && <CalendarHeader onDateSelect={handleDateSelect} selectedDate={selectedDate || today} />}
+        <AnimatePresence>
+          {isCalendarExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+            >
+              <CalendarHeader onDateSelect={handleDateSelect} selectedDate={selectedDate || today} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      <div className="mt-[72px]" ref={timelineRef}>
+      <div className="mt-[72px]">
         <CalendarTimeline
           selectedDate={selectedDate || today}
           onCreateItem={handleCreateItem}
           onEditItem={handleEditItem}
           onDeleteItem={handleDeleteItem}
+          onArchiveItem={handleArchiveItem}
           forceUpdate={forceUpdate}
           onCloseItemCard={handleCloseItemCard}
-          items={items} // Pass items to CalendarTimeline
+          items={items}
+          onMonthChange={handleMonthChange}
         />
       </div>
 
@@ -218,6 +246,8 @@ export function CalendarView() {
           type={selectedType}
           item={selectedItem || undefined}
           onSave={handleSaveItem}
+          onArchive={handleArchiveItem}
+          onDelete={handleDeleteItem}
         />
       )}
     </div>

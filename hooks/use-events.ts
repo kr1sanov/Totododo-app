@@ -29,19 +29,24 @@ export function useEvents() {
     }
   }, [events])
 
-  const addEvent = useCallback(
-    (event: Event) => {
-      // Create a new array with the new event added
-      const updatedEvents = [...events, event]
-      // Update state immediately for optimistic UI
-      setEvents(updatedEvents)
-      // Save to localStorage
-      saveToStorage("totododo-events", updatedEvents)
+ const addEvent = async (event: Event) => {
+  setEvents(prev => [...prev, event]) // МГНОВЕННО ДОБАВЛЯЕМ В ИНТЕРФЕЙС
 
-      return event
-    },
-    [events],
-  )
+  try {
+    const res = await fetch('/api/events', {
+      method: 'POST',
+      body: JSON.stringify(event),
+    })
+    const saved = await res.json()
+
+    // заменяем временное событие на настоящее
+    setEvents(prev => prev.map(e => e.id === event.id ? saved : e))
+  } catch (err) {
+    console.error('Ошибка при создании события', err)
+    // откатим если не удалось
+    setEvents(prev => prev.filter(e => e.id !== event.id))
+  }
+}
 
   const updateEvent = useCallback(
     (updatedEvent: Event) => {
@@ -57,15 +62,19 @@ export function useEvents() {
     [events],
   )
 
-  const deleteEvent = useCallback(
-    (id: string) => {
-      const eventToDelete = events.find((event) => event.id === id)
-      if (!eventToDelete) return null
+const deleteEvent = async (id: string) => {
+  const prevEvents = [...events] // запомним для отката
+  setEvents(prev => prev.filter(e => e.id !== id)) // сразу удалим
 
-      // Create a new array without the deleted event
-      const updatedEvents = events.filter((event) => event.id !== id)
-      // Update state immediately for optimistic UI
-      setEvents(updatedEvents)
+  try {
+    await fetch(`/api/events/${id}`, {
+      method: 'DELETE'
+    })
+  } catch (err) {
+    console.error('Ошибка при удалении', err)
+    setEvents(prevEvents) // откат
+  }
+}
 
       // Add to trash
       const trashedItems = getFromStorage("totododo-trash", [])
