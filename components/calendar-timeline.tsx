@@ -197,12 +197,12 @@ export function CalendarTimeline({
         const viewportMiddle = scrollTop + clientHeight / 2
 
         // Находим ближайший к центру экрана заголовок месяца
-        let closestHeader: Element | null = null
+        let closestHeader = null
         let minDistance = Number.POSITIVE_INFINITY
 
         monthHeaders.forEach((header) => {
           const rect = header.getBoundingClientRect()
-          const headerMiddle = rect.top + rect.height / 2 + scrollTop - timelineRef.current!.offsetTop
+          const headerMiddle = rect.top + rect.height / 2 + scrollTop - timelineRef.current.offsetTop
           const distance = Math.abs(headerMiddle - viewportMiddle)
 
           if (distance < minDistance) {
