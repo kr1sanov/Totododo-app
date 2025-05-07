@@ -15,43 +15,49 @@ import { toast } from "@/components/ui/use-toast"
 import { motion, AnimatePresence } from "framer-motion"
 
 export function CalendarView() {
+  // Состояния
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false)
   const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false)
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const [selectedType, setSelectedType] = useState<"event" | "task" | null>(null)
-  const [selectedItem, setSelectedItem] = useState<any | null>(null)
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [selectedType, setSelectedType] = useState(null)
+  const [selectedItem, setSelectedItem] = useState(null)
+  const [forceUpdate, setForceUpdate] = useState(false)
+  const [currentMonthLabel, setCurrentMonthLabel] = useState("")
+
+  // Хуки
   const { today, goToToday } = useToday()
   const { items, addItem, updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
-  const [forceUpdate, setForceUpdate] = useState(false)
-  const [currentMonthLabel, setCurrentMonthLabel] = useState(format(new Date(), "LLLL yyyy", { locale: ru }))
 
-  // Установка текущей даты при первой загрузке
+  // Установка текущей даты и месяца при первой загрузке
   useEffect(() => {
-    setSelectedDate(new Date())
+    const now = new Date()
+    setSelectedDate(now)
+    setCurrentMonthLabel(format(now, "LLLL yyyy", { locale: ru }))
   }, [])
 
+  // Обработчики
   const toggleCalendar = () => {
     setIsCalendarExpanded(!isCalendarExpanded)
   }
 
-  const handleDateSelect = (date: Date) => {
+  const handleDateSelect = (date) => {
     setSelectedDate(date)
   }
 
-  const handleCreateItem = (date: Date) => {
+  const handleCreateItem = (date) => {
     setSelectedDate(date)
     setSelectedItem(null)
     setIsTypeDialogOpen(true)
   }
 
-  const handleTypeSelect = (type: "event" | "task") => {
+  const handleTypeSelect = (type) => {
     setSelectedType(type)
     setIsTypeDialogOpen(false)
     setIsItemDialogOpen(true)
   }
 
-  const handleEditItem = (item: any) => {
+  const handleEditItem = (item) => {
     setSelectedItem(item)
     setSelectedType(item.type)
     setSelectedDate(new Date(item.date))
@@ -59,18 +65,17 @@ export function CalendarView() {
   }
 
   // Callback для обновления текущего месяца при прокрутке
-  const handleMonthChange = useCallback((monthLabel: string) => {
+  const handleMonthChange = useCallback((monthLabel) => {
     setCurrentMonthLabel(monthLabel)
   }, [])
 
   // Оптимистичное обновление при создании элемента
   const handleSaveItem = useCallback(
-    (item: any) => {
+    (item) => {
       try {
         if (selectedItem) {
-          // Create a copy of the item to avoid reference issues
+          // Обновляем существующий элемент
           const updatedItem = { ...item }
-          // Update state immediately for optimistic UI
           updateItem(updatedItem)
 
           toast({
@@ -78,9 +83,8 @@ export function CalendarView() {
             description: "Изменения успешно сохранены",
           })
         } else {
-          // Create a copy of the item with a new ID for optimistic UI
+          // Создаем новый элемент
           const newItem = { ...item, id: Date.now().toString() }
-          // Add to state immediately
           addItem(newItem)
 
           toast({
@@ -88,8 +92,8 @@ export function CalendarView() {
             description: "Элемент успешно добавлен в календарь",
           })
         }
-        // Force update the UI immediately
-        setForceUpdate((prev) => !prev)
+        // Обновляем UI
+        setForceUpdate(!forceUpdate)
       } catch (error) {
         console.error("Error saving item:", error)
         toast({
@@ -99,14 +103,13 @@ export function CalendarView() {
         })
       }
     },
-    [selectedItem, addItem, updateItem],
+    [selectedItem, addItem, updateItem, forceUpdate, toast],
   )
 
-  // Update the handleDeleteItem function
+  // Обработчик удаления
   const handleDeleteItem = useCallback(
-    (id: string, deleteAll = false) => {
+    (id, deleteAll) => {
       try {
-        // Delete immediately for optimistic UI
         if (deleteAll) {
           deleteRecurringItem(id, true)
         } else {
@@ -118,8 +121,7 @@ export function CalendarView() {
           description: "Элемент успешно удален из календаря",
         })
 
-        // Force update the UI immediately
-        setForceUpdate((prev) => !prev)
+        setForceUpdate(!forceUpdate)
       } catch (error) {
         console.error("Error deleting item:", error)
         toast({
@@ -129,14 +131,13 @@ export function CalendarView() {
         })
       }
     },
-    [deleteItem, deleteRecurringItem],
+    [deleteItem, deleteRecurringItem, forceUpdate, toast],
   )
 
   // Обработчик архивирования
   const handleArchiveItem = useCallback(
-    (id: string) => {
+    (id) => {
       try {
-        // Архивируем элемент
         archiveItem(id)
 
         toast({
@@ -144,8 +145,7 @@ export function CalendarView() {
           description: "Элемент успешно перемещен в архив",
         })
 
-        // Force update the UI immediately
-        setForceUpdate((prev) => !prev)
+        setForceUpdate(!forceUpdate)
       } catch (error) {
         console.error("Error archiving item:", error)
         toast({
@@ -155,21 +155,26 @@ export function CalendarView() {
         })
       }
     },
-    [archiveItem],
+    [archiveItem, forceUpdate, toast],
   )
 
   // Функция для закрытия карточки элемента
   const handleCloseItemCard = useCallback(() => {
-    // Принудительно обновляем состояние компонента при закрытии карточки
-    setForceUpdate((prev) => !prev)
-  }, [])
+    setForceUpdate(!forceUpdate)
+  }, [forceUpdate])
 
   // Обработчик для кнопки "Сегодня"
   const handleGoToToday = useCallback(() => {
-    const today = new Date()
-    setSelectedDate(today)
+    const now = new Date()
+    setSelectedDate(now)
     goToToday()
   }, [goToToday])
+
+  // Закрытие диалога создания/редактирования
+  const handleCloseItemDialog = useCallback(() => {
+    setIsItemDialogOpen(false)
+    setForceUpdate(!forceUpdate)
+  }, [forceUpdate])
 
   return (
     <div className="flex flex-col">
@@ -237,14 +242,10 @@ export function CalendarView() {
       {selectedType && (
         <CalendarItemDialog
           isOpen={isItemDialogOpen}
-          onClose={() => {
-            setIsItemDialogOpen(false)
-            // Обновляем интерфейс при закрытии диалога
-            setForceUpdate((prev) => !prev)
-          }}
+          onClose={handleCloseItemDialog}
           date={selectedDate || today}
           type={selectedType}
-          item={selectedItem || undefined}
+          item={selectedItem}
           onSave={handleSaveItem}
           onArchive={handleArchiveItem}
           onDelete={handleDeleteItem}

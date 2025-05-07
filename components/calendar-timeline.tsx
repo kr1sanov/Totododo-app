@@ -21,17 +21,19 @@ interface CalendarTimelineProps {
   onArchiveItem?: (id: string) => void
 }
 
-export function CalendarTimeline({
-  selectedDate,
-  onCreateItem,
-  onEditItem,
-  onDeleteItem,
-  forceUpdate,
-  onCloseItemCard,
-  items,
-  onMonthChange,
-  onArchiveItem,
-}: CalendarTimelineProps) {
+export function CalendarTimeline(props: CalendarTimelineProps) {
+  const {
+    selectedDate,
+    onCreateItem,
+    onEditItem,
+    onDeleteItem,
+    forceUpdate,
+    onCloseItemCard,
+    items,
+    onMonthChange,
+    onArchiveItem,
+  } = props
+
   const [dates, setDates] = useState<Date[]>([])
   const timelineRef = useRef<HTMLDivElement>(null)
   const topObserverRef = useRef<IntersectionObserver | null>(null)
@@ -45,7 +47,7 @@ export function CalendarTimeline({
 
   const { updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
 
-  // Генерируем начальные даты на 6 месяцев вперед и 6 месяцев назад от выбранной даты
+  // Генерируем начальные даты
   const generateInitialDates = useCallback(() => {
     const startDate = subMonths(selectedDate, 6)
     const endDate = addMonths(selectedDate, 6)
@@ -66,7 +68,7 @@ export function CalendarTimeline({
     setDates(generateInitialDates())
   }, [generateInitialDates])
 
-  // Загрузка дополнительных дат при прокрутке вниз (будущие даты)
+  // Загрузка дополнительных дат при прокрутке вниз
   const loadMoreDates = useCallback(() => {
     if (isLoading) return
 
@@ -92,7 +94,7 @@ export function CalendarTimeline({
     }, 300)
   }, [isLoading, generateInitialDates])
 
-  // Загрузка дополнительных дат при прокрутке вверх (прошлые даты)
+  // Загрузка дополнительных дат при прокрутке вверх
   const loadPreviousDates = useCallback(() => {
     if (isLoading) return
 
@@ -131,18 +133,19 @@ export function CalendarTimeline({
 
   // Настройка Intersection Observer для бесконечной прокрутки вниз
   useEffect(() => {
-    if (loadMoreBottomRef.current && !bottomObserverRef.current) {
-      bottomObserverRef.current = new IntersectionObserver(
-        (entries) => {
-          if (entries[0].isIntersecting && !isLoading) {
-            loadMoreDates()
-          }
-        },
-        { threshold: 0.1 },
-      )
+    if (!loadMoreBottomRef.current || bottomObserverRef.current) return
 
-      bottomObserverRef.current.observe(loadMoreBottomRef.current)
-    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoading) {
+          loadMoreDates()
+        }
+      },
+      { threshold: 0.1 },
+    )
+
+    observer.observe(loadMoreBottomRef.current)
+    bottomObserverRef.current = observer
 
     return () => {
       if (bottomObserverRef.current) {
@@ -154,18 +157,19 @@ export function CalendarTimeline({
 
   // Настройка Intersection Observer для бесконечной прокрутки вверх
   useEffect(() => {
-    if (loadMoreTopRef.current && !topObserverRef.current) {
-      topObserverRef.current = new IntersectionObserver(
-        (entries) => {
-          if (entries[0].isIntersecting && !isLoading) {
-            loadPreviousDates()
-          }
-        },
-        { threshold: 0.1 },
-      )
+    if (!loadMoreTopRef.current || topObserverRef.current) return
 
-      topObserverRef.current.observe(loadMoreTopRef.current)
-    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoading) {
+          loadPreviousDates()
+        }
+      },
+      { threshold: 0.1 },
+    )
+
+    observer.observe(loadMoreTopRef.current)
+    topObserverRef.current = observer
 
     return () => {
       if (topObserverRef.current) {
@@ -200,7 +204,8 @@ export function CalendarTimeline({
         let closestHeader = null
         let minDistance = Number.POSITIVE_INFINITY
 
-        monthHeaders.forEach((header) => {
+        for (let i = 0; i < monthHeaders.length; i++) {
+          const header = monthHeaders[i]
           const rect = header.getBoundingClientRect()
           const headerMiddle = rect.top + rect.height / 2 + scrollTop - timelineRef.current.offsetTop
           const distance = Math.abs(headerMiddle - viewportMiddle)
@@ -209,7 +214,7 @@ export function CalendarTimeline({
             closestHeader = header
             minDistance = distance
           }
-        })
+        }
 
         if (closestHeader) {
           const monthLabel = closestHeader.getAttribute("data-month-label")
@@ -239,50 +244,54 @@ export function CalendarTimeline({
 
   // Первоначальная прокрутка к выбранной дате
   useEffect(() => {
-    if (dates.length > 0 && timelineRef.current && isInitialScrollRef.current) {
-      const today = new Date()
-      const todayString = today.toISOString().split("T")[0]
-      const todayElement = document.getElementById(`date-${todayString}`)
+    if (dates.length === 0 || !timelineRef.current || !isInitialScrollRef.current) return
 
-      if (todayElement) {
-        setTimeout(() => {
-          if (timelineRef.current) {
-            timelineRef.current.scrollTo({
-              top: todayElement.offsetTop - 150,
-              behavior: "auto",
-            })
-            isInitialScrollRef.current = false
-          }
-        }, 100)
-      }
+    const today = new Date()
+    const todayString = today.toISOString().split("T")[0]
+    const todayElement = document.getElementById(`date-${todayString}`)
+
+    if (todayElement) {
+      setTimeout(() => {
+        if (timelineRef.current) {
+          timelineRef.current.scrollTo({
+            top: todayElement.offsetTop - 150,
+            behavior: "auto",
+          })
+          isInitialScrollRef.current = false
+        }
+      }, 100)
     }
   }, [dates])
 
   // Прокрутка к новой выбранной дате
   useEffect(() => {
-    if (dates.length > 0 && timelineRef.current && !isInitialScrollRef.current) {
-      const selectedDateString = selectedDate.toISOString().split("T")[0]
-      const selectedElement = document.getElementById(`date-${selectedDateString}`)
+    if (dates.length === 0 || !timelineRef.current || isInitialScrollRef.current) return
 
-      if (selectedElement) {
-        timelineRef.current.scrollTo({
-          top: selectedElement.offsetTop - 150,
-          behavior: "smooth",
-        })
-      } else {
-        // Если элемент не найден, значит дата не загружена. Загружаем новые даты
-        setDates(generateInitialDates())
-      }
+    const selectedDateString = selectedDate.toISOString().split("T")[0]
+    const selectedElement = document.getElementById(`date-${selectedDateString}`)
+
+    if (selectedElement) {
+      timelineRef.current.scrollTo({
+        top: selectedElement.offsetTop - 150,
+        behavior: "smooth",
+      })
+    } else {
+      // Если элемент не найден, значит дата не загружена. Загружаем новые даты
+      setDates(generateInitialDates())
     }
   }, [selectedDate, dates.length, generateInitialDates])
 
   // Получение элементов для даты
   const getItemsForDate = useCallback(
     (date: Date) => {
-      const dateString = date.toISOString().split("T")[0]
+      if (!items || items.length === 0) return []
 
-      return items.filter((item) => {
-        if (!item || !item.date) return false
+      const dateString = date.toISOString().split("T")[0]
+      const result = []
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (!item || !item.date) continue
 
         try {
           const itemDate = new Date(item.date).toISOString().split("T")[0]
@@ -293,21 +302,31 @@ export function CalendarTimeline({
             const targetDate = new Date(date)
 
             if (item.repeatType === "daily") {
-              return true
-            } else if (item.repeatType === "weekly") {
-              return itemDateObj.getDay() === targetDate.getDay()
-            } else if (item.repeatType === "monthly") {
-              return itemDateObj.getDate() === targetDate.getDate()
+              result.push(item)
+              continue
+            }
+
+            if (item.repeatType === "weekly" && itemDateObj.getDay() === targetDate.getDay()) {
+              result.push(item)
+              continue
+            }
+
+            if (item.repeatType === "monthly" && itemDateObj.getDate() === targetDate.getDate()) {
+              result.push(item)
+              continue
             }
           }
 
           // Для обычных элементов проверяем точное совпадение даты
-          return itemDate === dateString
+          if (itemDate === dateString) {
+            result.push(item)
+          }
         } catch (error) {
           console.error("Error processing item date:", error)
-          return false
         }
-      })
+      }
+
+      return result
     },
     [items],
   )
@@ -331,6 +350,18 @@ export function CalendarTimeline({
     [onArchiveItem, archiveItem],
   )
 
+  // Обработчик удаления
+  const handleDelete = useCallback(
+    (id: string, deleteAll: boolean) => {
+      if (deleteAll) {
+        deleteRecurringItem(id, true)
+      } else {
+        onDeleteItem(id, false)
+      }
+    },
+    [onDeleteItem, deleteRecurringItem],
+  )
+
   return (
     <div
       className="flex flex-col divide-y"
@@ -345,9 +376,13 @@ export function CalendarTimeline({
         const dateItems = getItemsForDate(date)
         const isFirstOfMonth = isMonthStart(date, index)
         const monthLabel = format(date, "LLLL yyyy", { locale: ru })
+        const dateKey = date.toISOString()
+        const dateId = `date-${date.toISOString().split("T")[0]}`
+        const isCurrentDay = isToday(date)
+        const isSelectedDay = isSameDay(date, selectedDate)
 
         return (
-          <div key={date.toISOString()} id={`date-${date.toISOString().split("T")[0]}`}>
+          <div key={dateKey} id={dateId}>
             {isFirstOfMonth && (
               <div
                 className="py-2 px-4 bg-muted/30 font-medium sticky top-0 z-10"
@@ -361,8 +396,8 @@ export function CalendarTimeline({
               <div
                 className={cn(
                   "w-16 py-4 px-2 text-center flex flex-col items-center justify-center",
-                  isToday(date) && "bg-primary/10",
-                  isSameDay(date, selectedDate) && "bg-primary/20",
+                  isCurrentDay && "bg-primary/10",
+                  isSelectedDay && "bg-primary/20",
                 )}
               >
                 <div className="text-lg font-bold">{date.getDate()}</div>
@@ -377,13 +412,7 @@ export function CalendarTimeline({
                         key={`${item.id}-${forceUpdate}`}
                         item={item}
                         onUpdate={updateItem}
-                        onDelete={(id, deleteAll) => {
-                          if (deleteAll) {
-                            deleteRecurringItem(id, true)
-                          } else {
-                            onDeleteItem(id, false)
-                          }
-                        }}
+                        onDelete={handleDelete}
                         onArchive={handleArchive}
                         onEdit={onEditItem}
                         onClose={onCloseItemCard || emptyOnClose}
