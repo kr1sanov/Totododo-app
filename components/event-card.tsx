@@ -9,13 +9,13 @@ import { EventDialog } from "@/components/event-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { MoreHorizontal, Calendar, MapPin, Clock, ArrowLeft, Pencil, Trash } from "lucide-react"
-import { useEvents } from "@/hooks/use-events"
+import { useEvents, Event as CalendarEvent } from "@/hooks/use-events"
 import { ru } from "date-fns/locale"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { toast } from "@/components/ui/use-toast"
 
 interface EventCardProps {
-  event: Event
+  event: CalendarEvent
   onClose?: () => void
 }
 
