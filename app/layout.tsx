@@ -11,16 +11,18 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
 })
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export const metadata = {
+  title: "Totododo — Ваш личный трекер задач",
+  description: "Минимум интерфейса, максимум продуктивности",
+  generator: "v0.dev",
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" suppressHydrationWarning>
       <head>
-        <title>Totododo - Ваш личный трекер задач</title>
-        <meta name="description" content="Минимум интерфейса, максимум продуктивности" />
+        {/* Telegram WebApp SDK — загружаем синхронно до основного JS */}
+        <script src="https://telegram.org/js/telegram-web-app.js" />
       </head>
       <body className={`${jetbrainsMono.variable} font-mono`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
@@ -30,34 +32,19 @@ export default function RootLayout({
           </AuthProvider>
         </ThemeProvider>
 
-        {/* Yandex.Metrika counter */}
-        <Script id="yandex-metrika" strategy="afterInteractive">
-          {`
-            (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
-            m[i].l=1*new Date();
-            for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
-            k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
-            (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
-
-            ym(101461440, "init", {
-                clickmap:true,
-                trackLinks:true,
-                accurateTrackBounce:true,
-                webvisor:true
-            });
-          `}
-        </Script>
+        {/* Yandex.Metrika */}
+        <Script id="yandex-metrika" strategy="afterInteractive">{`
+          (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+          m[i].l=1*new Date();
+          for(var j=0;j<document.scripts.length;j++){if(document.scripts[j].src===r){return;}}
+          k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+          (window,document,"script","https://mc.yandex.ru/metrika/tag.js","ym");
+          ym(101461440,"init",{clickmap:true,trackLinks:true,accurateTrackBounce:true,webvisor:true});
+        `}</Script>
         <noscript>
-          <div>
-            <img src="https://mc.yandex.ru/watch/101461440" style={{ position: "absolute", left: "-9999px" }} alt="" />
-          </div>
+          <div><img src="https://mc.yandex.ru/watch/101461440" style={{position:"absolute",left:"-9999px"}} alt="" /></div>
         </noscript>
-        {/* /Yandex.Metrika counter */}
       </body>
     </html>
   )
 }
-
-export const metadata = {
-      generator: 'v0.dev'
-    };
