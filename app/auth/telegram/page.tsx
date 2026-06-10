@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { createBrowserClient } from "@supabase/ssr"
+
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 const SUPABASE_FUNCTIONS_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL
