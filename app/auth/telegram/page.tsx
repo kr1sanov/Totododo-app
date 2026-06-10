@@ -1,44 +1,32 @@
 "use client"
-
 import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { createClient } from "@supabase/supabase-js"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase"
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-const SUPABASE_FUNCTIONS_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL
-    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`
-    : "https://iohyczenmqoyrjxdcykz.supabase.co/functions/v1"
+const SUPABASE_FUNCTIONS_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+  ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`
+  : "https://iohyczenmqoyrjxdcykz.supabase.co/functions/v1"
 
 export default function TelegramAuthPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const handleAuth = async () => {
       try {
-        const id = searchParams.get("id")
-        const first_name = searchParams.get("first_name")
-        const last_name = searchParams.get("last_name")
-        const username = searchParams.get("username")
-        const photo_url = searchParams.get("photo_url")
-        const auth_date = searchParams.get("auth_date")
-        const hash = searchParams.get("hash")
-
-        if (!id || !first_name || !auth_date || !hash) {
-          throw new Error("Неполные данные авторизации")
+        const twa = (window as any).Telegram?.WebApp
+        if (!twa?.initData) {
+          throw new Error("Нет данных Telegram. Откройте приложение через бота.")
         }
+
+        twa.ready()
+        twa.expand()
 
         const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/telegram-auth`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: Number(id), first_name, last_name, username, photo_url, auth_date, hash }),
+          body: JSON.stringify({ initData: twa.initData }),
         })
 
         const data = await res.json()
@@ -49,10 +37,9 @@ export default function TelegramAuthPage() {
           refresh_token: data.refresh_token,
         })
 
-        localStorage.setItem("totododo-telegram-user", JSON.stringify(data.user))
         router.push("/")
       } catch (err) {
-        console.error("Ошибка авторизации:", err)
+        console.error("Auth error:", err)
         setError((err as Error).message)
       } finally {
         setIsLoading(false)
@@ -60,14 +47,14 @@ export default function TelegramAuthPage() {
     }
 
     handleAuth()
-  }, [router, searchParams])
+  }, [router])
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="text-center space-y-4">
-          <div className="w-12 h-12 border-2 border-foreground border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-muted-foreground">Авторизация через Telegram...</p>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+          <p className="text-sm text-muted-foreground font-mono">Авторизация...</p>
         </div>
       </div>
     )
@@ -75,13 +62,14 @@ export default function TelegramAuthPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="text-center space-y-4">
-          <h1 className="text-xl font-semibold">Ошибка авторизации</h1>
-          <p className="text-destructive text-sm">{error}</p>
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="text-4xl">⚠️</div>
+          <h2 className="text-lg font-bold font-mono">Ошибка авторизации</h2>
+          <p className="text-sm text-muted-foreground font-mono">{error}</p>
           <button
-            className="px-4 py-2 border border-foreground rounded-md text-sm hover:bg-foreground hover:text-background transition-colors"
             onClick={() => router.push("/")}
+            className="bg-foreground text-background px-4 py-2 rounded-lg text-sm font-mono"
           >
             На главную
           </button>
