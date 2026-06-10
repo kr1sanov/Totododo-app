@@ -36,7 +36,7 @@ export function useTelegramAuth() {
       // Загружаем скрипт Telegram Login Widget
       const script = document.createElement("script")
       script.src = "https://telegram.org/js/telegram-widget.js?22"
-      script.setAttribute("data-telegram-login", "TotododoBot") // Замените на имя вашего бота
+      script.setAttribute("data-telegram-login", "totododoapp_bot") // Замените на имя вашего бота
       script.setAttribute("data-size", "large")
       script.setAttribute("data-auth-url", window.location.origin + "/auth/telegram")
       script.setAttribute("data-request-access", "write")
