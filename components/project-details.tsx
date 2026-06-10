@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useProjects } from "@/hooks/use-projects"
+import { useAuth } from "@/contexts/auth-context"
 import { TaskCard } from "@/components/task-card"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
@@ -17,7 +18,8 @@ interface ProjectDetailsProps {
 }
 
 export function ProjectDetails({ projectId }: ProjectDetailsProps) {
-  const { projects, getProject, addTask, updateTask, deleteTask, archiveTask } = useProjects()
+  const { user } = useAuth()
+  const { projects, getProject, addTask, updateTask, deleteTask, archiveTask } = useProjects(user?.id)
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | null>(null)
@@ -26,7 +28,6 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
 
   const project = getProject(projectId)
 
-  // If project doesn't exist, show loading or not found message
   if (!project) {
     return (
       <div className="p-4">
@@ -36,9 +37,10 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
     )
   }
 
-  const filteredTasks = project.tasks.filter((task) => statusFilter === null || task.status === statusFilter)
+  const filteredTasks = project.tasks.filter(
+    (task) => statusFilter === null || task.status === statusFilter
+  )
 
-  // Collect all unique tags from tasks
   const allTags = project.tasks
     .filter((task) => task.tags && task.tags.length > 0)
     .flatMap((task) => task.tags || [])
@@ -51,9 +53,7 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
 
   const handleCreateTask = async (task: Task) => {
     setIsSubmitting(true)
-
     try {
-      // Add task with optimistic update
       await addTask(projectId, task)
       setIsTaskDialogOpen(false)
     } catch (error) {
@@ -69,9 +69,7 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
 
   const handleUpdateTask = async (task: Task) => {
     setIsSubmitting(true)
-
     try {
-      // Update task with optimistic update
       await updateTask(projectId, task)
       setEditingTask(null)
     } catch (error) {
@@ -87,7 +85,6 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
 
   const handleDeleteTask = async (taskId: string) => {
     try {
-      // Delete task with optimistic update
       await deleteTask(projectId, taskId)
     } catch (error) {
       toast({
@@ -100,7 +97,6 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
 
   const handleArchiveTask = async (taskId: string) => {
     try {
-      // Archive task with optimistic update
       await archiveTask(projectId, taskId)
     } catch (error) {
       toast({
@@ -117,7 +113,6 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
 
   const handleStatusChange = async (task: Task, status: TaskStatus) => {
     try {
-      // Update task status with optimistic update
       await updateTask(projectId, { ...task, status })
     } catch (error) {
       toast({
@@ -129,36 +124,38 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
   }
 
   return (
-    <div className="space-y-4 p-4 pb-24">
-      <div className="flex items-center justify-between">
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-4">
         <BackButton />
-        <div className="flex gap-2">
-          <TaskFilter onFilterChange={setStatusFilter} currentFilter={statusFilter} />
-          <Button
-            onClick={() => setIsTaskDialogOpen(true)}
-            size="icon"
-            className="h-10 w-10 rounded-full"
-            aria-label="Add task"
-          >
-            <Plus className="h-5 w-5" />
-          </Button>
-        </div>
+        <Button
+          onClick={() => setIsTaskDialogOpen(true)}
+          size="icon"
+          className="h-10 w-10 rounded-full"
+          aria-label="Add task"
+        >
+          <Plus className="h-5 w-5" />
+        </Button>
       </div>
 
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">{project.name}</h1>
-        {project.description && <p className="text-muted-foreground">{project.description}</p>}
-      </div>
+      <h1 className="text-2xl font-bold mb-2">{project.name}</h1>
+      {project.description && (
+        <p className="text-muted-foreground mb-4">{project.description}</p>
+      )}
 
-      <ProjectStatistics projectId={projectId} />
+      <ProjectStatistics project={project} />
 
-      <div className="space-y-3">
+      <TaskFilter
+        currentFilter={statusFilter}
+        onFilterChange={setStatusFilter}
+        availableTags={allTags}
+      />
+
+      <div className="space-y-2 mt-4">
         {filteredTasks.length > 0 ? (
           filteredTasks.map((task) => (
             <TaskCard
               key={task.id}
               task={task}
-              projectId={projectId}
               onEdit={() => handleEditTask(task)}
               onDelete={() => handleDeleteTask(task.id)}
               onArchive={() => handleArchiveTask(task.id)}
@@ -166,15 +163,17 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
             />
           ))
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            {statusFilter ? `Нет задач со статусом ${statusFilter}` : "Нет задач. Создайте свою первую задачу!"}
-          </div>
+          <p className="text-muted-foreground text-center py-8">
+            {statusFilter
+              ? `Нет задач со статусом ${statusFilter}`
+              : "Нет задач. Создайте свою первую задачу!"}
+          </p>
         )}
       </div>
 
       <TaskDialog
-        open={isTaskDialogOpen}
-        onOpenChange={setIsTaskDialogOpen}
+        isOpen={isTaskDialogOpen}
+        onOpenChange={(open) => !open && setIsTaskDialogOpen(false)}
         onSubmit={handleCreateTask}
         projectId={projectId}
         availableTags={allTags}
@@ -183,7 +182,7 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
 
       {editingTask && (
         <TaskDialog
-          open={!!editingTask}
+          isOpen={!!editingTask}
           onOpenChange={(open) => !open && setEditingTask(null)}
           onSubmit={handleUpdateTask}
           task={editingTask}
