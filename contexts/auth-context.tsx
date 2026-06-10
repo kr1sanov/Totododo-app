@@ -13,6 +13,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+const SUPABASE_FUNCTIONS_URL =
+  process.env.NEXT_PUBLIC_SUPABASE_URL
+    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`
+    : "https://iohyczenmqoyrjxdcykz.supabase.co/functions/v1"
+
 function getTelegramWebApp() {
   if (typeof window === "undefined") return null
   return (window as any).Telegram?.WebApp ?? null
@@ -40,14 +45,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         twa.ready()
         twa.expand()
         try {
-          const res = await fetch(
-            `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/telegram-auth`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ initData: twa.initData }),
-            }
-          )
+          const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/telegram-auth`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ initData: twa.initData }),
+          })
           const data = await res.json()
           if (data.access_token) {
             const { data: sessionData } = await supabase.auth.setSession({
