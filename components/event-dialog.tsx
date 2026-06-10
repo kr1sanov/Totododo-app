@@ -19,7 +19,7 @@ interface EventDialogProps {
   isOpen: boolean
   onClose: () => void
   date: Date
-  event?: Event
+  event?: any
 }
 
 export function EventDialog({ isOpen, onClose, date, event }: EventDialogProps) {
@@ -31,13 +31,11 @@ export function EventDialog({ isOpen, onClose, date, event }: EventDialogProps) 
   const [location, setLocation] = useState(event?.location || "")
   const [description, setDescription] = useState(event?.description || "")
   const [repeatType, setRepeatType] = useState(event?.repeatType || "none")
-
   const [startDateOpen, setStartDateOpen] = useState(false)
   const [endDateOpen, setEndDateOpen] = useState(false)
 
   const { addEvent, updateEvent } = useEvents()
 
-  // Сбрасываем форму при открытии диалога
   useEffect(() => {
     if (isOpen) {
       if (event) {
@@ -81,18 +79,13 @@ export function EventDialog({ isOpen, onClose, date, event }: EventDialogProps) 
   }
 
   const handleTimeChange = (type: "start" | "end") => {
-    // Создаем временный input для выбора времени
     const input = document.createElement("input")
     input.type = "time"
-
-    // Устанавливаем текущее значение
     const currentDate = type === "start" ? startDate : endDate
     input.value = format(currentDate, "HH:mm")
 
-    // Добавляем обработчик изменения
     input.onchange = (e) => {
       const [hours, minutes] = (e.target as HTMLInputElement).value.split(":").map(Number)
-
       if (type === "start") {
         const newDate = new Date(startDate)
         newDate.setHours(hours, minutes)
@@ -104,15 +97,10 @@ export function EventDialog({ isOpen, onClose, date, event }: EventDialogProps) 
       }
     }
 
-    // Стилизуем и добавляем в DOM
     input.style.position = "fixed"
     input.style.opacity = "0"
     document.body.appendChild(input)
-
-    // Открываем диалог выбора времени
     input.showPicker()
-
-    // Удаляем после закрытия
     input.addEventListener("blur", () => {
       document.body.removeChild(input)
     })
@@ -162,7 +150,6 @@ export function EventDialog({ isOpen, onClose, date, event }: EventDialogProps) 
                   />
                 </PopoverContent>
               </Popover>
-
               <Button variant="outline" onClick={() => handleTimeChange("start")} className="w-[120px]">
                 {format(startDate, "HH:mm")}
               </Button>
@@ -194,7 +181,6 @@ export function EventDialog({ isOpen, onClose, date, event }: EventDialogProps) 
                   />
                 </PopoverContent>
               </Popover>
-
               <Button variant="outline" onClick={() => handleTimeChange("end")} className="w-[120px]">
                 {format(endDate, "HH:mm")}
               </Button>
@@ -254,17 +240,4 @@ export function EventDialog({ isOpen, onClose, date, event }: EventDialogProps) 
       </DialogContent>
     </Dialog>
   )
-}
-const { addEvent } = useEvents()
-
-const handleCreate = async () => {
-  const newEvent = {
-    id: uuidv4(),
-    title,
-    description,
-    date: selectedDate,
-  }
-
-  await addEvent(newEvent)
-  closeDialog() // закроем окно после создания
 }
