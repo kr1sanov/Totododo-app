@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { getSupabaseClient } from "@/lib/supabase"
+import { supabase } from "@/lib/supabase"
+
+const SUPABASE_FUNCTIONS_URL =
+  process.env.NEXT_PUBLIC_SUPABASE_URL
+    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`
+    : "https://iohyczenmqoyrjxdcykz.supabase.co/functions/v1"
 
 export default function TelegramAuthPage() {
   const router = useRouter()
@@ -13,7 +18,6 @@ export default function TelegramAuthPage() {
   useEffect(() => {
     const handleAuth = async () => {
       try {
-        // Получаем данные пользователя из URL
         const id = searchParams.get("id")
         const first_name = searchParams.get("first_name")
         const last_name = searchParams.get("last_name")
@@ -26,76 +30,22 @@ export default function TelegramAuthPage() {
           throw new Error("Неполные данные авторизации")
         }
 
-        // Создаем объект пользователя Telegram
-        const telegramUser = {
-          id: Number(id),
-          first_name,
-          last_name: last_name || undefined,
-          username: username || undefined,
-          photo_url: photo_url || undefined,
-          auth_date: Number(auth_date),
-          hash,
-        }
-
-        // Сохраняем данные пользователя Telegram
-        localStorage.setItem("totododo-telegram-user", JSON.stringify(telegramUser))
-
-        // Авторизуемся в Supabase
-        const supabase = getSupabaseClient()
-
-        // Создаем уникальный email на основе Telegram ID
-        const email = `telegram_${id}@totododo.app`
-        const password = `telegram_${id}_${auth_date}_${hash.substring(0, 10)}`
-
-        // Пытаемся войти
-        let { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+        const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/telegram-auth`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: Number(id), first_name, last_name, username, photo_url, auth_date, hash }),
         })
 
-        // Если пользователь не существует, регистрируем его
-        if (signInError && signInError.message.includes("Invalid login credentials")) {
-          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-              data: {
-                telegram_id: Number(id),
-                telegram_username: username || null,
-                telegram_first_name: first_name,
-                telegram_last_name: last_name || null,
-                telegram_photo_url: photo_url || null,
-              },
-            },
-          })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || "Ошибка авторизации")
 
-          if (signUpError) {
-            throw signUpError
-          }
+        await supabase.auth.setSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+        })
 
-          signInData = signUpData
-
-          // Создаем запись в таблице users
-          if (signUpData.user) {
-            const { error: userError } = await supabase.from("users").insert({
-              id: signUpData.user.id,
-              telegram_id: Number(id),
-              telegram_username: username || null,
-              telegram_first_name: first_name,
-              telegram_last_name: last_name || null,
-              telegram_photo_url: photo_url || null,
-            })
-
-            if (userError) {
-              console.error("Ошибка при создании пользователя:", userError)
-            }
-          }
-        } else if (signInError) {
-          throw signInError
-        }
-
-        // Перенаправляем на главную страницу
-        router.push("/settings")
+        localStorage.setItem("totododo-telegram-user", JSON.stringify(data.user))
+        router.push("/")
       } catch (err) {
         console.error("Ошибка авторизации:", err)
         setError((err as Error).message)
@@ -109,10 +59,10 @@ export default function TelegramAuthPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Авторизация через Telegram</h1>
-          <p>Пожалуйста, подождите, идет обработка данных...</p>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-2 border-foreground border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground">Авторизация через Telegram...</p>
         </div>
       </div>
     )
@@ -120,12 +70,15 @@ export default function TelegramAuthPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Ошибка авторизации</h1>
-          <p className="text-red-500">{error}</p>
-          <button className="mt-4 px-4 py-2 bg-primary text-white rounded" onClick={() => router.push("/settings")}>
-            Вернуться в настройки
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center space-y-4">
+          <h1 className="text-xl font-semibold">Ошибка авторизации</h1>
+          <p className="text-destructive text-sm">{error}</p>
+          <button
+            className="px-4 py-2 border border-foreground rounded-md text-sm hover:bg-foreground hover:text-background transition-colors"
+            onClick={() => router.push("/")}
+          >
+            На главную
           </button>
         </div>
       </div>
