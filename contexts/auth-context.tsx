@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             </p>
           </div>
           <a
-            href="https://t.me/YOUR_BOT_USERNAME"
+            href="https://t.me/totododoapp_bot"
             className="inline-flex items-center gap-2 bg-foreground text-background px-5 py-3 rounded-lg text-sm font-mono font-medium"
             target="_blank"
             rel="noopener noreferrer"
