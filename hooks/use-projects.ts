@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { getFromStorage, saveToStorage } from "@/lib/storage-utils"
+import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
 import { toast } from "@/components/ui/use-toast"
 import { sendNotification } from "@/lib/notifications"
 
@@ -33,260 +34,324 @@ export interface Project {
   name: string
   tasks: Task[]
   createdAt: string
+  user_id: string
 }
 
-export function useProjects(userId?: string) {
+export function useProjects() {
+  const { user } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
-  const [isInitialized, setIsInitialized] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    const storedProjects = getFromStorage("totododo-projects", [])
-    setProjects(storedProjects)
-    setIsInitialized(true)
-  }, [])
-
-  useEffect(() => {
-    if (isInitialized) {
-      saveToStorage("totododo-projects", projects)
+  // Load projects from Supabase
+  const loadProjects = useCallback(async () => {
+    if (!user?.telegramId) {
+      setProjects([])
+      setIsLoading(false)
+      return
     }
-  }, [projects, isInitialized])
+
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('user_id', user.telegramId)
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+
+      const parsedProjects = (data || []).map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        tasks: row.tasks || [],
+        createdAt: row.created_at,
+        user_id: row.user_id
+      }))
+
+      setProjects(parsedProjects)
+    } catch (error) {
+      console.error('Error loading projects:', error)
+      toast({
+        title: "Ошибка загрузки",
+        description: "Не удалось загрузить проекты",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [user])
+
+  useEffect(() => {
+    loadProjects()
+  }, [loadProjects])
+
+  // Subscribe to realtime changes
+  useEffect(() => {
+    if (!user?.telegramId) return
+
+    const channel = supabase
+      .channel('projects-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'projects',
+          filter: `user_id=eq.${user.telegramId}`
+        },
+        () => {
+          loadProjects()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user, loadProjects])
 
   const getProject = useCallback(
-    (id: string) => {
-      return projects.find((project) => project.id === id)
+    (projectId: string) => {
+      return projects.find((p) => p.id === projectId)
     },
-    [projects],
+    [projects]
   )
 
   const addProject = useCallback(
-    (project: Project) => {
-      const updatedProjects = [...projects, project]
-      setProjects(updatedProjects)
-      saveToStorage("totododo-projects", updatedProjects)
-      toast({
-        title: "Проект создан",
-        description: `Проект "${project.name}" успешно создан`,
-      })
-      return project
+    async (name: string) => {
+      if (!user?.telegramId) return
+
+      const newProject: Project = {
+        id: crypto.randomUUID(),
+        name,
+        tasks: [],
+        createdAt: new Date().toISOString(),
+        user_id: user.telegramId.toString()
+      }
+
+      try {
+        const { error } = await supabase
+          .from('projects')
+          .insert({
+            id: newProject.id,
+            name: newProject.name,
+            tasks: newProject.tasks,
+            created_at: newProject.createdAt,
+            user_id: newProject.user_id
+          })
+
+        if (error) throw error
+
+        toast({
+          title: "Проект создан",
+          description: `Проект "${name}" успешно создан`,
+        })
+      } catch (error) {
+        console.error('Error adding project:', error)
+        toast({
+          title: "Ошибка",
+          description: "Не удалось создать проект",
+          variant: "destructive",
+        })
+      }
     },
-    [projects],
+    [user]
   )
 
   const updateProject = useCallback(
-    (updatedProject: Project) => {
-      const updatedProjects = projects.map((project) =>
-        project.id === updatedProject.id ? updatedProject : project
-      )
-      setProjects(updatedProjects)
-      saveToStorage("totododo-projects", updatedProjects)
-      toast({
-        title: "Проект обновлен",
-        description: `Проект "${updatedProject.name}" успешно обновлен`,
-      })
-      return updatedProject
+    async (projectId: string, updates: Partial<Project>) => {
+      if (!user?.telegramId) return
+
+      try {
+        const { error } = await supabase
+          .from('projects')
+          .update({
+            name: updates.name,
+            tasks: updates.tasks,
+          })
+          .eq('id', projectId)
+          .eq('user_id', user.telegramId)
+
+        if (error) throw error
+
+        toast({
+          title: "Проект обновлен",
+          description: "Изменения сохранены",
+        })
+      } catch (error) {
+        console.error('Error updating project:', error)
+        toast({
+          title: "Ошибка",
+          description: "Не удалось обновить проект",
+          variant: "destructive",
+        })
+      }
     },
-    [projects],
+    [user]
   )
 
   const deleteProject = useCallback(
-    (id: string) => {
-      const projectToDelete = projects.find((project) => project.id === id)
-      if (projectToDelete) {
-        const updatedProjects = projects.filter((project) => project.id !== id)
-        setProjects(updatedProjects)
-        const trashedItems = getFromStorage("totododo-trash", [])
-        const updatedTrash = [
-          ...trashedItems,
-          {
-            ...projectToDelete,
-            type: "projects",
-            deletedAt: new Date().toISOString(),
-          },
-        ]
-        saveToStorage("totododo-projects", updatedProjects)
-        saveToStorage("totododo-trash", updatedTrash)
+    async (projectId: string) => {
+      if (!user?.telegramId) return
+
+      try {
+        const { error } = await supabase
+          .from('projects')
+          .delete()
+          .eq('id', projectId)
+          .eq('user_id', user.telegramId)
+
+        if (error) throw error
+
         toast({
           title: "Проект удален",
-          description: `Проект "${projectToDelete.name}" перемещен в корзину`,
+          description: "Проект успешно удален",
         })
-        return projectToDelete
-      }
-      return null
-    },
-    [projects],
-  )
-
-  const archiveProject = useCallback(
-    (id: string) => {
-      const projectToArchive = projects.find((project) => project.id === id)
-      if (projectToArchive) {
-        const updatedProjects = projects.filter((project) => project.id !== id)
-        setProjects(updatedProjects)
-        const archivedItems = getFromStorage("totododo-archive", [])
-        const updatedArchive = [
-          ...archivedItems,
-          {
-            ...projectToArchive,
-            type: "projects",
-            archivedAt: new Date().toISOString(),
-          },
-        ]
-        saveToStorage("totododo-projects", updatedProjects)
-        saveToStorage("totododo-archive", updatedArchive)
+      } catch (error) {
+        console.error('Error deleting project:', error)
         toast({
-          title: "Проект архивирован",
-          description: `Проект "${projectToArchive.name}" перемещен в архив`,
+          title: "Ошибка",
+          description: "Не удалось удалить проект",
+          variant: "destructive",
         })
-        return projectToArchive
       }
-      return null
     },
-    [projects],
+    [user]
   )
 
   const addTask = useCallback(
-    (projectId: string, task: Task) => {
-      const project = projects.find((p) => p.id === projectId)
-      const updatedProjects = projects.map((p) => {
-        if (p.id === projectId) {
-          return { ...p, tasks: [...p.tasks, task] }
-        }
-        return p
-      })
-      setProjects(updatedProjects)
-      saveToStorage("totododo-projects", updatedProjects)
-      toast({
-        title: "Задача создана",
-        description: `Задача "${task.title}" успешно создана`,
-      })
+    async (
+      projectId: string,
+      task: Omit<Task, "id" | "createdAt">
+    ) => {
+      const project = getProject(projectId)
+      if (!project || !user?.telegramId) return
 
-      if (userId) {
-        sendNotification(userId, "task_created", {
-          title: task.title,
-          project: project?.name,
-          due_date: task.dueDate,
-        })
+      const newTask: Task = {
+        ...task,
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
       }
 
-      return task
+      const updatedTasks = [...project.tasks, newTask]
+
+      try {
+        const { error } = await supabase
+          .from('projects')
+          .update({ tasks: updatedTasks })
+          .eq('id', projectId)
+          .eq('user_id', user.telegramId)
+
+        if (error) throw error
+
+        toast({
+          title: "Задача создана",
+          description: `Задача "${task.title}" добавлена`,
+        })
+
+        if (user.telegramId) {
+          sendNotification(
+            user.telegramId.toString(),
+            `Создана новая задача: ${task.title}`
+          )
+        }
+      } catch (error) {
+        console.error('Error adding task:', error)
+        toast({
+          title: "Ошибка",
+          description: "Не удалось создать задачу",
+          variant: "destructive",
+        })
+      }
     },
-    [projects, userId],
+    [getProject, user]
   )
 
   const updateTask = useCallback(
-    (projectId: string, updatedTask: Task) => {
-      const project = projects.find((p) => p.id === projectId)
-      const prevTask = project?.tasks.find((t) => t.id === updatedTask.id)
-      const updatedProjects = projects.map((p) => {
-        if (p.id === projectId) {
-          return {
-            ...p,
-            tasks: p.tasks.map((task) =>
-              task.id === updatedTask.id ? updatedTask : task
-            ),
+    async (
+      projectId: string,
+      taskId: string,
+      updates: Partial<Task>
+    ) => {
+      const project = getProject(projectId)
+      if (!project || !user?.telegramId) return
+
+      const updatedTasks = project.tasks.map((task) =>
+        task.id === taskId ? { ...task, ...updates } : task
+      )
+
+      try {
+        const { error } = await supabase
+          .from('projects')
+          .update({ tasks: updatedTasks })
+          .eq('id', projectId)
+          .eq('user_id', user.telegramId)
+
+        if (error) throw error
+
+        if (updates.completed !== undefined && user.telegramId) {
+          const task = project.tasks.find(t => t.id === taskId)
+          if (task) {
+            sendNotification(
+              user.telegramId.toString(),
+              updates.completed
+                ? `Задача выполнена: ${task.title}`
+                : `Задача отмечена как невыполненная: ${task.title}`
+            )
           }
         }
-        return p
-      })
-      setProjects(updatedProjects)
-      saveToStorage("totododo-projects", updatedProjects)
-      toast({
-        title: "Задача обновлена",
-        description: `Задача "${updatedTask.title}" успешно обновлена`,
-      })
-
-      if (userId && !prevTask?.completed && updatedTask.completed) {
-        sendNotification(userId, "task_completed", {
-          title: updatedTask.title,
-          project: project?.name,
+      } catch (error) {
+        console.error('Error updating task:', error)
+        toast({
+          title: "Ошибка",
+          description: "Не удалось обновить задачу",
+          variant: "destructive",
         })
       }
-
-      return updatedTask
     },
-    [projects, userId],
+    [getProject, user]
   )
 
   const deleteTask = useCallback(
-    (projectId: string, taskId: string) => {
-      const project = projects.find((p) => p.id === projectId)
-      const taskToDelete = project?.tasks.find((t) => t.id === taskId)
-      if (project && taskToDelete) {
-        const updatedProjects = projects.map((p) => {
-          if (p.id === projectId) {
-            return { ...p, tasks: p.tasks.filter((t) => t.id !== taskId) }
-          }
-          return p
-        })
-        setProjects(updatedProjects)
-        const trashedItems = getFromStorage("totododo-trash", [])
-        const updatedTrash = [
-          ...trashedItems,
-          {
-            ...taskToDelete,
-            projectId,
-            type: "tasks",
-            deletedAt: new Date().toISOString(),
-          },
-        ]
-        saveToStorage("totododo-projects", updatedProjects)
-        saveToStorage("totododo-trash", updatedTrash)
+    async (projectId: string, taskId: string) => {
+      const project = getProject(projectId)
+      if (!project || !user?.telegramId) return
+
+      const updatedTasks = project.tasks.filter((task) => task.id !== taskId)
+
+      try {
+        const { error } = await supabase
+          .from('projects')
+          .update({ tasks: updatedTasks })
+          .eq('id', projectId)
+          .eq('user_id', user.telegramId)
+
+        if (error) throw error
+
         toast({
           title: "Задача удалена",
-          description: `Задача "${taskToDelete.title}" перемещена в корзину`,
+          description: "Задача успешно удалена",
         })
-        return taskToDelete
-      }
-      return null
-    },
-    [projects],
-  )
-
-  const archiveTask = useCallback(
-    (projectId: string, taskId: string) => {
-      const project = projects.find((p) => p.id === projectId)
-      const taskToArchive = project?.tasks.find((t) => t.id === taskId)
-      if (project && taskToArchive) {
-        const updatedProjects = projects.map((p) => {
-          if (p.id === projectId) {
-            return { ...p, tasks: p.tasks.filter((t) => t.id !== taskId) }
-          }
-          return p
-        })
-        setProjects(updatedProjects)
-        const archivedItems = getFromStorage("totododo-archive", [])
-        const updatedArchive = [
-          ...archivedItems,
-          {
-            ...taskToArchive,
-            projectId,
-            type: "tasks",
-            archivedAt: new Date().toISOString(),
-          },
-        ]
-        saveToStorage("totododo-projects", updatedProjects)
-        saveToStorage("totododo-archive", updatedArchive)
+      } catch (error) {
+        console.error('Error deleting task:', error)
         toast({
-          title: "Задача архивирована",
-          description: `Задача "${taskToArchive.title}" перемещена в архив`,
+          title: "Ошибка",
+          description: "Не удалось удалить задачу",
+          variant: "destructive",
         })
-        return taskToArchive
       }
-      return null
     },
-    [projects],
+    [getProject, user]
   )
 
   return {
     projects,
+    isLoading,
     getProject,
     addProject,
     updateProject,
     deleteProject,
-    archiveProject,
     addTask,
     updateTask,
     deleteTask,
-    archiveTask,
   }
 }
