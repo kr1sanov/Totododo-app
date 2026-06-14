@@ -67,8 +67,7 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
     }
   }, [])
 
-  const toggleTaskCompletion = (e: React.MouseEvent) => {
-    e.stopPropagation()
+  const toggleTaskCompletion = () => {
     if (item.type === "task") {
       // Create a new item object with the updated completed status
       const updatedItem = {
@@ -196,8 +195,8 @@ export function CalendarItemCard({ item, onUpdate, onDelete, onArchive, onEdit, 
                 {item.type === "task" && (
                   <Checkbox
                     checked={item.completed}
-                    onCheckedChange={() => {}}
-                    onClick={toggleTaskCompletion}
+                    onCheckedChange={toggleTaskCompletion}
+                    onClick={(e) => e.stopPropagation()}
                     className="mt-1 h-5 w-5"
                   />
                 )}

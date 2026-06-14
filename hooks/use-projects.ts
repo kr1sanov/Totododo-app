@@ -57,6 +57,10 @@ function normalizeTask(task: unknown, projectId: string): Task | null {
 
   const completed = Boolean(value.completed)
   const rawStatus = typeof value.status === "string" ? value.status : undefined
+  const createdAt = value.createdAt ?? value.created_at
+  const updatedAt = value.updatedAt ?? value.updated_at ?? createdAt
+  const dueDate = value.dueDate ?? value.due_date
+  const taskProjectId = value.projectId ?? value.project_id ?? projectId
   const status: TaskStatus =
     rawStatus === "todo" || rawStatus === "in-progress" || rawStatus === "done" || rawStatus === "blocked"
       ? rawStatus
@@ -69,10 +73,10 @@ function normalizeTask(task: unknown, projectId: string): Task | null {
     title: String(value.title),
     description: value.description ? String(value.description) : undefined,
     status,
-    projectId,
-    createdAt: value.createdAt ? String(value.createdAt) : new Date().toISOString(),
-    updatedAt: value.updatedAt ? String(value.updatedAt) : value.createdAt ? String(value.createdAt) : new Date().toISOString(),
-    dueDate: value.dueDate ? String(value.dueDate) : undefined,
+    projectId: String(taskProjectId),
+    createdAt: createdAt ? String(createdAt) : new Date().toISOString(),
+    updatedAt: updatedAt ? String(updatedAt) : new Date().toISOString(),
+    dueDate: dueDate ? String(dueDate) : undefined,
     priority: value.priority === "low" || value.priority === "high" ? value.priority : "medium",
     tags: Array.isArray(value.tags) ? value.tags.map(normalizeTag).filter(Boolean) as Tag[] : [],
     completed,
@@ -87,13 +91,17 @@ function normalizeTask(task: unknown, projectId: string): Task | null {
           })
           .map((file) => ({ name: String(file.name), url: String(file.url) }))
       : [],
+    isArchived: Boolean(value.isArchived ?? value.is_archived),
+    isDeleted: Boolean(value.isDeleted ?? value.is_deleted),
   }
 }
 
 function normalizeProject(project: Record<string, unknown>): Project {
   const projectId = String(project.id)
   const tasks = Array.isArray(project.tasks)
-    ? project.tasks.map((task) => normalizeTask(task, projectId)).filter(Boolean) as Task[]
+    ? (project.tasks.map((task) => normalizeTask(task, projectId)).filter(Boolean) as Task[]).filter(
+        (task) => !task.isArchived && !task.isDeleted,
+      )
     : []
 
   return {
@@ -104,6 +112,8 @@ function normalizeProject(project: Record<string, unknown>): Project {
     createdAt: project.created_at ? String(project.created_at) : new Date().toISOString(),
     updatedAt: project.updated_at ? String(project.updated_at) : undefined,
     userId: project.user_id ? String(project.user_id) : undefined,
+    isArchived: Boolean(project.is_archived),
+    isDeleted: Boolean(project.is_deleted),
   }
 }
 
@@ -136,8 +146,10 @@ export function useProjects() {
     try {
       const { data, error } = await supabase
         .from("projects")
-        .select("*")
+        .select("*, tasks(*, subtasks(*))")
         .eq("user_id", user.id)
+        .eq("is_archived", false)
+        .eq("is_deleted", false)
         .order("created_at", { ascending: true })
 
       if (error) {
@@ -167,7 +179,7 @@ export function useProjects() {
     }
 
     const channel = supabase
-      .channel("projects-changes")
+      .channel(`projects-changes-${user.id}`)
       .on(
         "postgres_changes",
         {
@@ -175,6 +187,31 @@ export function useProjects() {
           schema: "public",
           table: "projects",
           filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          loadProjects()
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [loadProjects, user?.id])
+
+  useEffect(() => {
+    if (!user?.id) {
+      return
+    }
+
+    const channel = supabase
+      .channel(`tasks-changes-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tasks",
         },
         () => {
           loadProjects()
@@ -214,8 +251,6 @@ export function useProjects() {
         const { error } = await supabase.from("projects").insert({
           id: newProject.id,
           name: newProject.name,
-          description: newProject.description,
-          tasks: [],
           created_at: newProject.createdAt,
           updated_at: newProject.updatedAt,
           user_id: user.id,
@@ -266,19 +301,19 @@ export function useProjects() {
       }
 
       try {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("projects")
           .update({
             name: updatedProject.name,
-            description: updatedProject.description,
-            tasks: updatedProject.tasks,
             updated_at: updatedProject.updatedAt,
           })
           .eq("id", projectId)
           .eq("user_id", user.id)
+          .select("id")
+          .single()
 
-        if (error) {
-          throw error
+        if (error || !data) {
+          throw error ?? new Error("Не удалось сохранить проект")
         }
 
         setProjects((currentProjects) =>
@@ -349,10 +384,11 @@ export function useProjects() {
 
   const addTask = useCallback(
     async (projectId: string, task: Omit<Task, "id" | "createdAt" | "updatedAt"> | Task) => {
-      const project = getProject(projectId)
-      if (!project) {
+      if (!user?.id) {
         return null
       }
+
+      const project = getProject(projectId)
 
       const now = new Date().toISOString()
       const newTask: Task = {
@@ -368,9 +404,65 @@ export function useProjects() {
         tags: task.tags ?? [],
       }
 
-      await updateProject(projectId, {
-        tasks: [...project.tasks, newTask],
-      })
+      try {
+        const { data, error } = await supabase
+          .from("tasks")
+          .insert({
+            id: newTask.id,
+            project_id: projectId,
+            title: newTask.title,
+            description: newTask.description,
+            due_date: newTask.dueDate,
+            priority: newTask.priority,
+            completed: newTask.completed,
+            location: newTask.location,
+            created_at: newTask.createdAt,
+            updated_at: newTask.updatedAt,
+          })
+          .select()
+          .single()
+
+        if (error || !data) {
+          throw error ?? new Error("Не удалось сохранить задачу")
+        }
+
+        if (newTask.subtasks.length > 0) {
+          const { error: subtasksError } = await supabase.from("subtasks").insert(
+            newTask.subtasks.map((subtask) => ({
+              id: subtask.id,
+              task_id: newTask.id,
+              title: subtask.title,
+              completed: subtask.completed,
+              created_at: subtask.createdAt ?? now,
+              updated_at: now,
+            })),
+          )
+
+          if (subtasksError) {
+            throw subtasksError
+          }
+        }
+
+        setProjects((currentProjects) =>
+          currentProjects.map((currentProject) =>
+            currentProject.id === projectId
+              ? { ...currentProject, tasks: [...currentProject.tasks, newTask] }
+              : currentProject,
+          ),
+        )
+
+        if (!project) {
+          await loadProjects()
+        }
+      } catch (error) {
+        console.error("Error adding task:", error)
+        toast({
+          title: "Ошибка",
+          description: "Не удалось создать задачу",
+          variant: "destructive",
+        })
+        throw error
+      }
 
       toast({
         title: "Задача создана",
@@ -379,7 +471,7 @@ export function useProjects() {
 
       return newTask
     },
-    [getProject, updateProject],
+    [getProject, loadProjects, user?.id],
   )
 
   const updateTask = useCallback(
@@ -406,13 +498,72 @@ export function useProjects() {
         updatedTask.completed = updates.status === "done"
       }
 
-      await updateProject(projectId, {
-        tasks: project.tasks.map((task) => (task.id === taskId ? updatedTask : task)),
-      })
+      try {
+        const { data, error } = await supabase
+          .from("tasks")
+          .update({
+            title: updatedTask.title,
+            description: updatedTask.description,
+            due_date: updatedTask.dueDate,
+            priority: updatedTask.priority,
+            completed: updatedTask.completed,
+            location: updatedTask.location,
+            updated_at: updatedTask.updatedAt,
+          })
+          .eq("id", taskId)
+          .eq("project_id", projectId)
+          .select("id")
+          .single()
+
+        if (error || !data) {
+          throw error ?? new Error("Не удалось обновить задачу")
+        }
+
+        const { error: deleteSubtasksError } = await supabase.from("subtasks").delete().eq("task_id", taskId)
+        if (deleteSubtasksError) {
+          throw deleteSubtasksError
+        }
+
+        if (updatedTask.subtasks.length > 0) {
+          const { error: subtasksError } = await supabase.from("subtasks").insert(
+            updatedTask.subtasks.map((subtask) => ({
+              id: subtask.id,
+              task_id: taskId,
+              title: subtask.title,
+              completed: subtask.completed,
+              created_at: subtask.createdAt ?? updatedTask.updatedAt,
+              updated_at: updatedTask.updatedAt,
+            })),
+          )
+
+          if (subtasksError) {
+            throw subtasksError
+          }
+        }
+
+        setProjects((currentProjects) =>
+          currentProjects.map((currentProject) =>
+            currentProject.id === projectId
+              ? {
+                  ...currentProject,
+                  tasks: currentProject.tasks.map((task) => (task.id === taskId ? updatedTask : task)),
+                }
+              : currentProject,
+          ),
+        )
+      } catch (error) {
+        console.error("Error updating task:", error)
+        toast({
+          title: "Ошибка",
+          description: "Не удалось обновить задачу",
+          variant: "destructive",
+        })
+        throw error
+      }
 
       return updatedTask
     },
-    [getProject, updateProject],
+    [getProject],
   )
 
   const deleteTask = useCallback(
@@ -422,9 +573,29 @@ export function useProjects() {
         return null
       }
 
-      await updateProject(projectId, {
-        tasks: project.tasks.filter((task) => task.id !== taskId),
-      })
+      try {
+        const { error } = await supabase.from("tasks").delete().eq("id", taskId).eq("project_id", projectId)
+
+        if (error) {
+          throw error
+        }
+
+        setProjects((currentProjects) =>
+          currentProjects.map((currentProject) =>
+            currentProject.id === projectId
+              ? { ...currentProject, tasks: currentProject.tasks.filter((task) => task.id !== taskId) }
+              : currentProject,
+          ),
+        )
+      } catch (error) {
+        console.error("Error deleting task:", error)
+        toast({
+          title: "Ошибка",
+          description: "Не удалось удалить задачу",
+          variant: "destructive",
+        })
+        throw error
+      }
 
       toast({
         title: "Задача удалена",
@@ -433,7 +604,7 @@ export function useProjects() {
 
       return taskId
     },
-    [getProject, updateProject],
+    [getProject],
   )
 
   const archiveTask = useCallback(

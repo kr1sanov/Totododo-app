@@ -39,6 +39,8 @@ export function useEvents(userId?: string) {
         .from("events")
         .select("*")
         .eq("user_id", resolvedUserId)
+        .eq("is_archived", false)
+        .eq("is_deleted", false)
         .order("start_date", { ascending: true })
 
       if (error) {
@@ -54,6 +56,10 @@ export function useEvents(userId?: string) {
           location: event.location || undefined,
           description: event.description || undefined,
           repeatType: event.repeat_type || "none",
+          createdAt: event.created_at,
+          updatedAt: event.updated_at,
+          isArchived: event.is_archived,
+          isDeleted: event.is_deleted,
         })),
       )
     } catch (error) {
@@ -116,6 +122,8 @@ export function useEvents(userId?: string) {
             location: event.location,
             description: event.description,
             repeat_type: event.repeatType,
+            created_at: event.createdAt,
+            updated_at: event.updatedAt,
           })
           .select()
           .single()
@@ -152,21 +160,24 @@ export function useEvents(userId?: string) {
       }
 
       try {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("events")
-          .update({
+          .upsert({
+            id: updatedEvent.id,
+            user_id: resolvedUserId,
             title: updatedEvent.title,
             start_date: updatedEvent.startDate,
             end_date: updatedEvent.endDate,
             location: updatedEvent.location,
             description: updatedEvent.description,
             repeat_type: updatedEvent.repeatType,
+            updated_at: new Date().toISOString(),
           })
-          .eq("id", updatedEvent.id)
-          .eq("user_id", resolvedUserId)
+          .select()
+          .single()
 
-        if (error) {
-          throw error
+        if (error || !data) {
+          throw error ?? new Error("Не удалось обновить событие")
         }
 
         setEvents((currentEvents) =>

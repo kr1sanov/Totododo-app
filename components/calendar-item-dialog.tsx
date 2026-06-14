@@ -34,6 +34,7 @@ interface CalendarItem {
   videoMeetingUrl?: string
   files?: { name: string; url: string }[]
   endDate?: string
+  projectId?: string
 }
 
 interface CalendarItemDialogProps {
@@ -45,9 +46,18 @@ interface CalendarItemDialogProps {
   onSave: (item: CalendarItem) => void
   onArchive?: (id: string) => void
   onDelete?: (id: string, deleteAll: boolean) => void
+  projects?: { id: string; name: string }[]
 }
 
-export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }: CalendarItemDialogProps) {
+export function CalendarItemDialog({
+  isOpen,
+  onClose,
+  date,
+  type,
+  item,
+  onSave,
+  projects = [],
+}: CalendarItemDialogProps) {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [selectedDate, setSelectedDate] = useState<Date>(date)
@@ -67,6 +77,7 @@ export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }
   const [files, setFiles] = useState<{ name: string; url: string }[]>([])
   const [newFileName, setNewFileName] = useState("")
   const [newFileUrl, setNewFileUrl] = useState("")
+  const [projectId, setProjectId] = useState("")
 
   const contentRef = useRef<HTMLDivElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -88,6 +99,7 @@ export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }
         setVideoMeetingUrl(item.videoMeetingUrl || "")
         setShowVideoMeeting(!!item.videoMeetingUrl)
         setFiles(item.files || [])
+        setProjectId(item.projectId || projects[0]?.id || "")
 
         if (type === "task" && item.priority) {
           setPriority(item.priority)
@@ -123,6 +135,7 @@ export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }
         setVideoMeetingUrl("")
         setShowVideoMeeting(false)
         setFiles([])
+        setProjectId(projects[0]?.id || "")
       }
 
       // Фокус на поле заголовка при открытии
@@ -135,7 +148,7 @@ export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }
 
     setNewFileName("")
     setNewFileUrl("")
-  }, [isOpen, item, date, type])
+  }, [isOpen, item, date, type, projects])
 
   // Прокрутка при фокусе на поле ввода (для мобильных устройств)
   useEffect(() => {
@@ -210,6 +223,7 @@ export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }
     if (type === "task") {
       newItem.completed = item?.completed || false
       newItem.priority = priority
+      newItem.projectId = projectId || projects[0]?.id
 
       // Для задач также сохраняем время начала и окончания
       if (!isAllDay) {
@@ -426,29 +440,52 @@ export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }
           </div>
 
           {type === "task" && (
-            <div className="grid gap-2">
-              <Label className="text-base">Приоритет</Label>
-              <RadioGroup value={priority} onValueChange={(value) => setPriority(value as any)} className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="low" id="low" className="h-5 w-5" />
-                  <Label htmlFor="low" className="text-base">
-                    Низкий
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="medium" id="medium" className="h-5 w-5" />
-                  <Label htmlFor="medium" className="text-base">
-                    Средний
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="high" id="high" className="h-5 w-5" />
-                  <Label htmlFor="high" className="text-base">
-                    Высокий
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
+            <>
+              <div className="grid gap-2">
+                <Label className="text-base">Проект</Label>
+                <Select value={projectId} onValueChange={setProjectId}>
+                  <SelectTrigger className="h-12 text-base">
+                    <SelectValue placeholder={projects.length > 0 ? "Выберите проект" : "Будет создан Inbox"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {projects.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    При сохранении будет создан системный проект Inbox.
+                  </p>
+                )}
+              </div>
+
+              <div className="grid gap-2">
+                <Label className="text-base">Приоритет</Label>
+                <RadioGroup value={priority} onValueChange={(value) => setPriority(value as any)} className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="low" id="low" className="h-5 w-5" />
+                    <Label htmlFor="low" className="text-base">
+                      Низкий
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="medium" id="medium" className="h-5 w-5" />
+                    <Label htmlFor="medium" className="text-base">
+                      Средний
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="high" id="high" className="h-5 w-5" />
+                    <Label htmlFor="high" className="text-base">
+                      Высокий
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+            </>
           )}
 
           {type === "event" && (

@@ -7,12 +7,12 @@ import { cn } from "@/lib/utils"
 import { CalendarItemCard } from "@/components/calendar-item-card"
 import { format, addDays, isToday, isSameDay, subDays, addMonths, subMonths } from "date-fns"
 import { ru } from "date-fns/locale"
-import { useCalendarItems } from "@/hooks/use-calendar-items"
 
 interface CalendarTimelineProps {
   selectedDate: Date
   onCreateItem: (date: Date) => void
   onEditItem: (item: any) => void
+  onUpdateItem: (item: any) => void
   onDeleteItem: (id: string, deleteAll: boolean) => void
   forceUpdate?: boolean
   onCloseItemCard?: () => void
@@ -26,6 +26,7 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
     selectedDate,
     onCreateItem,
     onEditItem,
+    onUpdateItem,
     onDeleteItem,
     forceUpdate,
     onCloseItemCard,
@@ -44,8 +45,6 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
   const isInitialScrollRef = useRef(true)
   const lastVisibleMonthRef = useRef("")
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  const { updateItem, deleteItem, archiveItem, deleteRecurringItem } = useCalendarItems()
 
   // Генерируем начальные даты
   const generateInitialDates = useCallback(() => {
@@ -340,25 +339,17 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
   // Обработчик архивирования
   const handleArchive = useCallback(
     (id: string) => {
-      if (onArchiveItem) {
-        onArchiveItem(id)
-      } else {
-        archiveItem(id)
-      }
+      onArchiveItem?.(id)
     },
-    [onArchiveItem, archiveItem],
+    [onArchiveItem],
   )
 
   // Обработчик удаления
   const handleDelete = useCallback(
     (id: string, deleteAll: boolean) => {
-      if (deleteAll) {
-        deleteRecurringItem(id, true)
-      } else {
-        onDeleteItem(id, false)
-      }
+      onDeleteItem(id, deleteAll)
     },
-    [onDeleteItem, deleteRecurringItem],
+    [onDeleteItem],
   )
 
   return (
@@ -410,7 +401,7 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
                       <CalendarItemCard
                         key={`${item.id}-${forceUpdate}`}
                         item={item}
-                        onUpdate={updateItem}
+                        onUpdate={onUpdateItem}
                         onDelete={handleDelete}
                         onArchive={handleArchive}
                         onEdit={onEditItem}
