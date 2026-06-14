@@ -1,14 +1,39 @@
-// Проверка, выполняется ли код на клиенте
-export const isClient = typeof window !== "undefined"
+import "./runtime-storage"
+
+function getSafeStorage() {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  try {
+    const storage = window.localStorage
+    if (
+      storage &&
+      typeof storage.getItem === "function" &&
+      typeof storage.setItem === "function" &&
+      typeof storage.removeItem === "function"
+    ) {
+      return storage
+    }
+  } catch (error) {
+    return null
+  }
+
+  return null
+}
+
+// Проверка, выполняется ли код на клиенте с рабочим localStorage
+export const isClient = !!getSafeStorage()
 
 // Безопасное получение данных из localStorage
 export function getFromStorage<T>(key: string, defaultValue: T): T {
-  if (!isClient) {
+  const storage = getSafeStorage()
+  if (!storage) {
     return defaultValue
   }
 
   try {
-    const item = localStorage.getItem(key)
+    const item = storage.getItem(key)
     return item ? JSON.parse(item) : defaultValue
   } catch (error) {
     console.error(`Ошибка при получении ${key} из localStorage:`, error)
@@ -18,12 +43,13 @@ export function getFromStorage<T>(key: string, defaultValue: T): T {
 
 // Безопасное сохранение данных в localStorage
 export function saveToStorage(key: string, value: any): void {
-  if (!isClient) {
+  const storage = getSafeStorage()
+  if (!storage) {
     return
   }
 
   try {
-    localStorage.setItem(key, JSON.stringify(value))
+    storage.setItem(key, JSON.stringify(value))
   } catch (error) {
     console.error(`Ошибка при сохранении ${key} в localStorage:`, error)
   }
@@ -31,12 +57,13 @@ export function saveToStorage(key: string, value: any): void {
 
 // Безопасное удаление данных из localStorage
 export function removeFromStorage(key: string): void {
-  if (!isClient) {
+  const storage = getSafeStorage()
+  if (!storage) {
     return
   }
 
   try {
-    localStorage.removeItem(key)
+    storage.removeItem(key)
   } catch (error) {
     console.error(`Ошибка при удалении ${key} из localStorage:`, error)
   }

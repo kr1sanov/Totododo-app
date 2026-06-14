@@ -1,4 +1,5 @@
 import type React from "react"
+import "@/lib/runtime-storage"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from "@/contexts/auth-context"
