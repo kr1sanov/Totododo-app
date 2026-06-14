@@ -7,6 +7,30 @@ import { getFromStorage, saveToStorage } from "@/lib/storage-utils"
 import { toast } from "@/components/ui/use-toast"
 import type { Event } from "@/types"
 
+function requireUserId(userId?: string) {
+  if (!userId) {
+    throw new Error("AUTH_REQUIRED")
+  }
+
+  return userId
+}
+
+function normalizeEvent(event: Record<string, any>): Event {
+  return {
+    id: event.id,
+    title: event.title,
+    startDate: event.start_date,
+    endDate: event.end_date,
+    location: event.location || undefined,
+    description: event.description || undefined,
+    repeatType: event.repeat_type || "none",
+    createdAt: event.created_at,
+    updatedAt: event.updated_at,
+    isArchived: event.is_archived,
+    isDeleted: event.is_deleted,
+  }
+}
+
 function addArchivedEvent(event: Event) {
   const archivedItems = getFromStorage("totododo-archive", [] as unknown[])
   saveToStorage("totododo-archive", [
@@ -47,21 +71,7 @@ export function useEvents(userId?: string) {
         throw error
       }
 
-      setEvents(
-        (data ?? []).map((event) => ({
-          id: event.id,
-          title: event.title,
-          startDate: event.start_date,
-          endDate: event.end_date,
-          location: event.location || undefined,
-          description: event.description || undefined,
-          repeatType: event.repeat_type || "none",
-          createdAt: event.created_at,
-          updatedAt: event.updated_at,
-          isArchived: event.is_archived,
-          isDeleted: event.is_deleted,
-        })),
-      )
+      setEvents((data ?? []).map(normalizeEvent))
     } catch (error) {
       console.error("Error loading events:", error)
       toast({
@@ -106,40 +116,40 @@ export function useEvents(userId?: string) {
 
   const addEvent = useCallback(
     async (event: Event) => {
-      if (!resolvedUserId) {
-        return null
-      }
+      const userId = requireUserId(resolvedUserId)
 
       try {
+        const now = new Date().toISOString()
         const { data, error } = await supabase
           .from("events")
           .insert({
             id: event.id,
-            user_id: resolvedUserId,
+            user_id: userId,
             title: event.title,
             start_date: event.startDate,
             end_date: event.endDate,
             location: event.location,
             description: event.description,
             repeat_type: event.repeatType,
-            created_at: event.createdAt,
-            updated_at: event.updatedAt,
+            created_at: event.createdAt ?? now,
+            updated_at: event.updatedAt ?? now,
           })
           .select()
           .single()
 
-        if (error) {
-          throw error
+        if (error || !data) {
+          throw error ?? new Error("Не удалось сохранить событие")
         }
 
-        setEvents((currentEvents) => [...currentEvents, event])
+        const savedEvent = normalizeEvent(data)
+        setEvents((currentEvents) => [...currentEvents, savedEvent])
 
         toast({
           title: "Событие создано",
-          description: `Событие "${event.title}" успешно создано`,
+          description: `Событие "${savedEvent.title}" успешно создано`,
         })
 
-        return data
+        return savedEvent
       } catch (error) {
         console.error("Error adding event:", error)
         toast({
@@ -155,23 +165,23 @@ export function useEvents(userId?: string) {
 
   const updateEvent = useCallback(
     async (updatedEvent: Event) => {
-      if (!resolvedUserId) {
-        return null
-      }
+      const userId = requireUserId(resolvedUserId)
 
       try {
+        const now = new Date().toISOString()
         const { data, error } = await supabase
           .from("events")
           .upsert({
             id: updatedEvent.id,
-            user_id: resolvedUserId,
+            user_id: userId,
             title: updatedEvent.title,
             start_date: updatedEvent.startDate,
             end_date: updatedEvent.endDate,
             location: updatedEvent.location,
             description: updatedEvent.description,
             repeat_type: updatedEvent.repeatType,
-            updated_at: new Date().toISOString(),
+            created_at: updatedEvent.createdAt,
+            updated_at: now,
           })
           .select()
           .single()
@@ -180,16 +190,15 @@ export function useEvents(userId?: string) {
           throw error ?? new Error("Не удалось обновить событие")
         }
 
-        setEvents((currentEvents) =>
-          currentEvents.map((event) => (event.id === updatedEvent.id ? updatedEvent : event)),
-        )
+        const savedEvent = normalizeEvent(data)
+        setEvents((currentEvents) => currentEvents.map((event) => (event.id === savedEvent.id ? savedEvent : event)))
 
         toast({
           title: "Событие обновлено",
           description: `Событие "${updatedEvent.title}" успешно обновлено`,
         })
 
-        return updatedEvent
+        return savedEvent
       } catch (error) {
         console.error("Error updating event:", error)
         toast({
@@ -205,12 +214,10 @@ export function useEvents(userId?: string) {
 
   const deleteEvent = useCallback(
     async (id: string) => {
-      if (!resolvedUserId) {
-        return null
-      }
+      const userId = requireUserId(resolvedUserId)
 
       try {
-        const { error } = await supabase.from("events").delete().eq("id", id).eq("user_id", resolvedUserId)
+        const { error } = await supabase.from("events").delete().eq("id", id).eq("user_id", userId)
 
         if (error) {
           throw error
@@ -236,7 +243,7 @@ export function useEvents(userId?: string) {
     async (id: string) => {
       const event = events.find((currentEvent) => currentEvent.id === id)
       if (!event) {
-        return null
+        throw new Error("EVENT_NOT_FOUND")
       }
 
       addArchivedEvent(event)

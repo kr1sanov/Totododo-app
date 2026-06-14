@@ -17,7 +17,7 @@ interface ProjectDetailsProps {
 }
 
 export function ProjectDetails({ projectId }: ProjectDetailsProps) {
-  const { getProject, addTask, updateTask, deleteTask, archiveTask } = useProjects()
+  const { getProject, addTask, updateTask, deleteTask, archiveTask, isLoading } = useProjects()
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | null>(null)
@@ -25,6 +25,15 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
   const { toast } = useToast()
 
   const project = getProject(projectId)
+
+  if (isLoading) {
+    return (
+      <div className="p-4">
+        <BackButton />
+        <div className="mt-4 text-muted-foreground">Загрузка проекта...</div>
+      </div>
+    )
+  }
 
   if (!project) {
     return (

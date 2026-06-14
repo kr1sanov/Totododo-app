@@ -7,6 +7,14 @@ import { getFromStorage, saveToStorage } from "@/lib/storage-utils"
 import { toast } from "@/components/ui/use-toast"
 import type { Project, Tag, Task, TaskStatus, Subtask } from "@/types"
 
+function requireUserId(userId?: string) {
+  if (!userId) {
+    throw new Error("AUTH_REQUIRED")
+  }
+
+  return userId
+}
+
 function normalizeTag(tag: unknown): Tag | null {
   if (!tag || typeof tag !== "object") {
     return null
@@ -233,9 +241,7 @@ export function useProjects() {
 
   const addProject = useCallback(
     async (name: string) => {
-      if (!user?.id) {
-        return null
-      }
+      const userId = requireUserId(user?.id)
 
       const now = new Date().toISOString()
       const newProject: Project = {
@@ -244,30 +250,36 @@ export function useProjects() {
         tasks: [],
         createdAt: now,
         updatedAt: now,
-        userId: user.id,
+        userId,
       }
 
       try {
-        const { error } = await supabase.from("projects").insert({
-          id: newProject.id,
-          name: newProject.name,
-          created_at: newProject.createdAt,
-          updated_at: newProject.updatedAt,
-          user_id: user.id,
-        })
+        const { data, error } = await supabase
+          .from("projects")
+          .insert({
+            id: newProject.id,
+            name: newProject.name,
+            created_at: newProject.createdAt,
+            updated_at: newProject.updatedAt,
+            user_id: userId,
+          })
+          .select("*")
+          .single()
 
-        if (error) {
-          throw error
+        if (error || !data) {
+          throw error ?? new Error("Не удалось сохранить проект")
         }
 
-        setProjects((currentProjects) => [...currentProjects, newProject])
+        const savedProject = normalizeProject({ ...data, tasks: [] })
+
+        setProjects((currentProjects) => [...currentProjects, savedProject])
 
         toast({
           title: "Проект создан",
-          description: `Проект "${newProject.name}" успешно создан`,
+          description: `Проект "${savedProject.name}" успешно создан`,
         })
 
-        return newProject
+        return savedProject
       } catch (error) {
         console.error("Error adding project:", error)
         toast({
@@ -283,13 +295,11 @@ export function useProjects() {
 
   const updateProject = useCallback(
     async (projectId: string, updates: Partial<Project>) => {
-      if (!user?.id) {
-        return null
-      }
+      const userId = requireUserId(user?.id)
 
       const currentProject = projects.find((project) => project.id === projectId)
       if (!currentProject) {
-        return null
+        throw new Error("PROJECT_NOT_FOUND")
       }
 
       const updatedProject: Project = {
@@ -308,7 +318,7 @@ export function useProjects() {
             updated_at: updatedProject.updatedAt,
           })
           .eq("id", projectId)
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .select("id")
           .single()
 
@@ -336,12 +346,10 @@ export function useProjects() {
 
   const deleteProject = useCallback(
     async (projectId: string) => {
-      if (!user?.id) {
-        return null
-      }
+      const userId = requireUserId(user?.id)
 
       try {
-        const { error } = await supabase.from("projects").delete().eq("id", projectId).eq("user_id", user.id)
+        const { error } = await supabase.from("projects").delete().eq("id", projectId).eq("user_id", userId)
 
         if (error) {
           throw error
@@ -372,7 +380,7 @@ export function useProjects() {
     async (projectId: string) => {
       const project = getProject(projectId)
       if (!project) {
-        return null
+        throw new Error("PROJECT_NOT_FOUND")
       }
 
       addArchivedItem(project.id, project.name, "projects", project)
@@ -384,9 +392,7 @@ export function useProjects() {
 
   const addTask = useCallback(
     async (projectId: string, task: Omit<Task, "id" | "createdAt" | "updatedAt"> | Task) => {
-      if (!user?.id) {
-        return null
-      }
+      requireUserId(user?.id)
 
       const project = getProject(projectId)
 
@@ -403,6 +409,7 @@ export function useProjects() {
         subtasks: task.subtasks ?? [],
         tags: task.tags ?? [],
       }
+      let savedTask = newTask
 
       try {
         const { data, error } = await supabase
@@ -443,10 +450,12 @@ export function useProjects() {
           }
         }
 
+        savedTask = normalizeTask(data, projectId) ?? newTask
+
         setProjects((currentProjects) =>
           currentProjects.map((currentProject) =>
             currentProject.id === projectId
-              ? { ...currentProject, tasks: [...currentProject.tasks, newTask] }
+              ? { ...currentProject, tasks: [...currentProject.tasks, savedTask] }
               : currentProject,
           ),
         )
@@ -469,21 +478,23 @@ export function useProjects() {
         description: `Задача "${newTask.title}" добавлена`,
       })
 
-      return newTask
+      return savedTask
     },
     [getProject, loadProjects, user?.id],
   )
 
   const updateTask = useCallback(
     async (projectId: string, taskId: string, updates: Partial<Task>) => {
+      requireUserId(user?.id)
+
       const project = getProject(projectId)
       if (!project) {
-        return null
+        throw new Error("PROJECT_NOT_FOUND")
       }
 
       const currentTask = project.tasks.find((task) => task.id === taskId)
       if (!currentTask) {
-        return null
+        throw new Error("TASK_NOT_FOUND")
       }
 
       const updatedTask: Task = {
@@ -563,14 +574,16 @@ export function useProjects() {
 
       return updatedTask
     },
-    [getProject],
+    [getProject, user?.id],
   )
 
   const deleteTask = useCallback(
     async (projectId: string, taskId: string) => {
+      requireUserId(user?.id)
+
       const project = getProject(projectId)
       if (!project) {
-        return null
+        throw new Error("PROJECT_NOT_FOUND")
       }
 
       try {
@@ -604,7 +617,7 @@ export function useProjects() {
 
       return taskId
     },
-    [getProject],
+    [getProject, user?.id],
   )
 
   const archiveTask = useCallback(
@@ -612,7 +625,7 @@ export function useProjects() {
       const project = getProject(projectId)
       const task = project?.tasks.find((projectTask) => projectTask.id === taskId)
       if (!project || !task) {
-        return null
+        throw new Error("TASK_NOT_FOUND")
       }
 
       addArchivedItem(task.id, task.title, "tasks", task)

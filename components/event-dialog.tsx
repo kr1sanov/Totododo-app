@@ -15,6 +15,7 @@ import { ru } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { useEvents } from "@/hooks/use-events"
 import type { Event } from "@/types"
+import { toast } from "@/components/ui/use-toast"
 
 interface EventDialogProps {
   isOpen: boolean
@@ -35,6 +36,7 @@ export function EventDialog({ isOpen, onClose, date, event, onSave }: EventDialo
   const [repeatType, setRepeatType] = useState(event?.repeatType || "none")
   const [startDateOpen, setStartDateOpen] = useState(false)
   const [endDateOpen, setEndDateOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { addEvent, updateEvent } = useEvents()
 
@@ -58,11 +60,11 @@ export function EventDialog({ isOpen, onClose, date, event, onSave }: EventDialo
     }
   }, [isOpen, event, date])
 
-  const handleSubmit = () => {
-    if (!title.trim()) return
+  const handleSubmit = async () => {
+    if (!title.trim() || isSubmitting) return
 
     const eventData: Event = {
-      id: event?.id || Date.now().toString(),
+      id: event?.id || crypto.randomUUID(),
       title,
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
@@ -71,15 +73,27 @@ export function EventDialog({ isOpen, onClose, date, event, onSave }: EventDialo
       repeatType: repeatType as Event["repeatType"],
     }
 
-    if (onSave) {
-      onSave(eventData)
-    } else if (event) {
-      updateEvent(eventData)
-    } else {
-      addEvent(eventData)
-    }
+    setIsSubmitting(true)
+    try {
+      if (onSave) {
+        await onSave(eventData)
+      } else if (event) {
+        await updateEvent(eventData)
+      } else {
+        await addEvent(eventData)
+      }
 
-    onClose()
+      onClose()
+    } catch (error) {
+      console.error("Error saving event:", error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось сохранить событие. Пожалуйста, попробуйте снова.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleTimeChange = (type: "start" | "end") => {
@@ -111,7 +125,7 @@ export function EventDialog({ isOpen, onClose, date, event, onSave }: EventDialo
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && !isSubmitting && onClose()}>
       <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{event ? "Редактировать событие" : "Новое событие"}</DialogTitle>
@@ -239,10 +253,12 @@ export function EventDialog({ isOpen, onClose, date, event, onSave }: EventDialo
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
             Отменить
           </Button>
-          <Button onClick={handleSubmit}>{event ? "Сохранить" : "Добавить событие"}</Button>
+          <Button onClick={handleSubmit} disabled={!title.trim() || isSubmitting}>
+            {isSubmitting ? "Сохранение..." : event ? "Сохранить" : "Добавить событие"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

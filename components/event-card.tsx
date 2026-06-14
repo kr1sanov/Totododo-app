@@ -36,7 +36,7 @@ export function EventCard({ event, onClose }: EventCardProps) {
     return format(date, "d MMMM yyyy", { locale: ru })
   }
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation()
 
     if (isSubmitting) return // Prevent multiple clicks
@@ -44,11 +44,9 @@ export function EventCard({ event, onClose }: EventCardProps) {
     setIsSubmitting(true)
 
     try {
-      // Delete immediately for optimistic UI
-      deleteEvent(event.id)
+      await deleteEvent(event.id)
       onClose && onClose()
 
-      // Show toast notification
       toast({
         title: "Событие удалено",
         description: "Событие успешно удалено",
@@ -60,11 +58,12 @@ export function EventCard({ event, onClose }: EventCardProps) {
         description: "Не удалось удалить событие",
         variant: "destructive",
       })
+    } finally {
       setIsSubmitting(false)
     }
   }
 
-  const handleArchive = (e: React.MouseEvent) => {
+  const handleArchive = async (e: React.MouseEvent) => {
     e.stopPropagation()
 
     if (isSubmitting) return // Prevent multiple clicks
@@ -72,11 +71,9 @@ export function EventCard({ event, onClose }: EventCardProps) {
     setIsSubmitting(true)
 
     try {
-      // Archive immediately for optimistic UI
-      archiveEvent(event.id)
+      await archiveEvent(event.id)
       onClose && onClose()
 
-      // Show toast notification
       toast({
         title: "Событие архивировано",
         description: "Событие успешно перемещено в архив",
@@ -88,6 +85,7 @@ export function EventCard({ event, onClose }: EventCardProps) {
         description: "Не удалось архивировать событие",
         variant: "destructive",
       })
+    } finally {
       setIsSubmitting(false)
     }
   }

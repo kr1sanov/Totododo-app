@@ -43,7 +43,7 @@ interface CalendarItemDialogProps {
   date: Date
   type: "event" | "task"
   item?: CalendarItem
-  onSave: (item: CalendarItem) => void
+  onSave: (item: CalendarItem) => void | Promise<void>
   onArchive?: (id: string) => void
   onDelete?: (id: string, deleteAll: boolean) => void
   projects?: { id: string; name: string }[]
@@ -78,6 +78,7 @@ export function CalendarItemDialog({
   const [newFileName, setNewFileName] = useState("")
   const [newFileUrl, setNewFileUrl] = useState("")
   const [projectId, setProjectId] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const contentRef = useRef<HTMLDivElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -200,48 +201,61 @@ export function CalendarItemDialog({
     })
   }
 
-  const handleSubmit = () => {
-    if (!title.trim()) return
+  const handleSubmit = async () => {
+    if (!title.trim() || isSubmitting) return
 
-    const newItem: CalendarItem = {
-      id: item?.id || Date.now().toString(),
-      title,
-      date: selectedDate.toISOString(),
-      type,
-      location,
-      description,
-      repeatType,
-      createdAt: item?.createdAt || new Date().toISOString(),
-      isAllDay,
-      files: files.length > 0 ? files : undefined,
-    }
+    setIsSubmitting(true)
 
-    if (showVideoMeeting && videoMeetingUrl) {
-      newItem.videoMeetingUrl = videoMeetingUrl
-    }
-
-    if (type === "task") {
-      newItem.completed = item?.completed || false
-      newItem.priority = priority
-      newItem.projectId = projectId || projects[0]?.id
-
-      // Для задач также сохраняем время начала и окончания
-      if (!isAllDay) {
-        newItem.startTime = `${startHour}:${startMinute}`
-        newItem.endTime = `${endHour}:${endMinute}`
+    try {
+      const newItem: CalendarItem = {
+        id: item?.id || crypto.randomUUID(),
+        title,
+        date: selectedDate.toISOString(),
+        type,
+        location,
+        description,
+        repeatType,
+        createdAt: item?.createdAt || new Date().toISOString(),
+        isAllDay,
+        files: files.length > 0 ? files : undefined,
       }
-    }
 
-    if (type === "event") {
-      if (!isAllDay) {
-        newItem.startTime = `${startHour}:${startMinute}`
-        newItem.endTime = `${endHour}:${endMinute}`
+      if (showVideoMeeting && videoMeetingUrl) {
+        newItem.videoMeetingUrl = videoMeetingUrl
       }
-      newItem.endDate = endDate.toISOString()
-    }
 
-    onSave(newItem)
-    onClose()
+      if (type === "task") {
+        newItem.completed = item?.completed || false
+        newItem.priority = priority
+        newItem.projectId = projectId || projects[0]?.id
+
+        // Для задач также сохраняем время начала и окончания
+        if (!isAllDay) {
+          newItem.startTime = `${startHour}:${startMinute}`
+          newItem.endTime = `${endHour}:${endMinute}`
+        }
+      }
+
+      if (type === "event") {
+        if (!isAllDay) {
+          newItem.startTime = `${startHour}:${startMinute}`
+          newItem.endTime = `${endHour}:${endMinute}`
+        }
+        newItem.endDate = endDate.toISOString()
+      }
+
+      await onSave(newItem)
+      onClose()
+    } catch (error) {
+      console.error("Error saving calendar item:", error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось сохранить элемент. Пожалуйста, попробуйте снова.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -588,11 +602,11 @@ export function CalendarItemDialog({
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-4">
-          <Button variant="outline" onClick={onClose} className="h-12 text-base">
+          <Button variant="outline" onClick={onClose} className="h-12 text-base" disabled={isSubmitting}>
             Отменить
           </Button>
-          <Button onClick={handleSubmit} className="h-12 text-base">
-            {item ? "Сохранить" : "Создать"}
+          <Button onClick={handleSubmit} className="h-12 text-base" disabled={!title.trim() || isSubmitting}>
+            {isSubmitting ? "Сохранение..." : item ? "Сохранить" : "Создать"}
           </Button>
         </DialogFooter>
       </DialogContent>

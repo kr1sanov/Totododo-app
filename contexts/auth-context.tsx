@@ -7,6 +7,8 @@ interface AuthContextType {
   user: User | null
   session: Session | null
   isLoading: boolean
+  authStatus: "loading" | "authenticated" | "auth_failed"
+  authError: string | null
   signOut: () => Promise<void>
 }
 
@@ -32,50 +34,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [authFailed, setAuthFailed] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+
+  const failAuth = (message: string) => {
+    setAuthError(message)
+    setAuthFailed(true)
+    setSession(null)
+    setUser(null)
+  }
 
   useEffect(() => {
     const init = async () => {
-      // 1. Проверяем существующую сессию
-      const { data: { session: existingSession } } = await supabase.auth.getSession()
-      if (existingSession) {
-        setSession(existingSession)
-        setUser(existingSession.user)
-        setIsLoading(false)
-        return
-      }
+      try {
+        // 1. Проверяем существующую сессию
+        const { data: { session: existingSession } } = await supabase.auth.getSession()
+        if (existingSession?.user) {
+          setSession(existingSession)
+          setUser(existingSession.user)
+          setAuthFailed(false)
+          setAuthError(null)
+          setIsLoading(false)
+          return
+        }
 
-      // 2. Telegram WebApp авторизация
-      const twa = getTelegramWebApp()
-      if (twa?.initData) {
-        twa.ready()
-        twa.expand()
-        try {
+        // 2. Telegram WebApp авторизация
+        const twa = getTelegramWebApp()
+        if (twa?.initData) {
+          twa.ready()
+          twa.expand()
           const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/telegram-auth`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ initData: twa.initData }),
           })
-          const data = await res.json()
-          if (data.access_token) {
-            const { data: sessionData } = await supabase.auth.setSession({
-              access_token: data.access_token,
-              refresh_token: data.refresh_token,
-            })
-            setSession(sessionData.session)
-            setUser(sessionData.session?.user ?? null)
-            setIsLoading(false)
-            return
-          }
-        } catch (err) {
-          console.error("Telegram auth error:", err)
-        }
-      }
 
-      // 3. Нет сессии и не в Telegram — показать заглушку
-      if (!isTelegramEnvironment()) {
-        setAuthFailed(true)
+          if (!res.ok) {
+            throw new Error(`Telegram auth failed with status ${res.status}`)
+          }
+
+          const data = await res.json()
+
+          if (!data.access_token || !data.refresh_token) {
+            throw new Error("Telegram auth did not return Supabase tokens")
+          }
+
+          const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+            access_token: data.access_token,
+            refresh_token: data.refresh_token,
+          })
+
+          if (sessionError || !sessionData.session?.user) {
+            throw sessionError ?? new Error("Supabase session was not created")
+          }
+
+          setSession(sessionData.session)
+          setUser(sessionData.session.user)
+          setAuthFailed(false)
+          setAuthError(null)
+          setIsLoading(false)
+          return
+        }
+
+        // 3. Нет сессии и не в Telegram — показать заглушку
+        if (!isTelegramEnvironment()) {
+          failAuth("Откройте приложение через Telegram Mini App.")
+          return
+        }
+
+        failAuth("Не удалось авторизоваться через Telegram. Откройте Mini App заново.")
+      } catch (err) {
+        console.error("Telegram auth error:", err)
+        failAuth("Не удалось авторизоваться через Telegram. Откройте Mini App заново.")
+      } finally {
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }
 
     init()
@@ -83,6 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
+      if (session?.user) {
+        setAuthFailed(false)
+        setAuthError(null)
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -92,6 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
     setUser(null)
     setSession(null)
+    setAuthFailed(true)
+    setAuthError("Вы вышли из аккаунта.")
   }
 
   if (isLoading) {
@@ -105,16 +143,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     )
   }
 
-  if (authFailed || (!isLoading && !session && !isTelegramEnvironment())) {
+  if (authFailed || (!isLoading && !session)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
         <div className="flex flex-col items-center gap-6 text-center max-w-xs">
-          <div className="text-5xl">✈️</div>
+          <div className="text-5xl">!</div>
           <div>
-            <h1 className="text-xl font-bold font-mono mb-2">Откройте в Telegram</h1>
+            <h1 className="text-xl font-bold font-mono mb-2">Нужна авторизация</h1>
             <p className="text-sm text-muted-foreground font-mono leading-relaxed">
-              Totododo — это Telegram Mini App.<br />
-              Откройте приложение через бота в Telegram.
+              {authError || "Totododo должен получить Telegram-сессию, чтобы сохранять данные в облаке."}
             </p>
           </div>
           <a
@@ -131,7 +168,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        isLoading,
+        authStatus: session?.user ? "authenticated" : authFailed ? "auth_failed" : "loading",
+        authError,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )

@@ -18,8 +18,9 @@ export default function EventsPage() {
   const [newTitle, setNewTitle] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
 
-  const handleCreate = useCallback(() => {
+  const handleCreate = useCallback(async () => {
     if (!newTitle.trim()) {
       toast({
         title: "Ошибка",
@@ -28,6 +29,8 @@ export default function EventsPage() {
       })
       return
     }
+
+    if (isCreating) return
 
     // Создаем новое событие с минимальными данными
     const now = new Date()
@@ -41,15 +44,20 @@ export default function EventsPage() {
       repeatType: "none",
     }
 
-    // Оптимистично добавляем событие
-    addEvent(newEvent)
-    setNewTitle("")
-
-    toast({
-      title: "Событие создано",
-      description: "Новое событие успешно добавлено",
-    })
-  }, [newTitle, addEvent])
+    setIsCreating(true)
+    try {
+      await addEvent(newEvent)
+      setNewTitle("")
+    } catch (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось создать событие. Пожалуйста, попробуйте снова.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsCreating(false)
+    }
+  }, [newTitle, addEvent, isCreating])
 
   const handleEdit = useCallback((event: Event) => {
     setEditingEvent(event)
@@ -57,42 +65,24 @@ export default function EventsPage() {
   }, [])
 
   const handleUpdate = useCallback(
-    (updatedEvent: Event) => {
-      // Оптимистично обновляем событие
-      updateEvent(updatedEvent)
+    async (updatedEvent: Event) => {
+      await updateEvent(updatedEvent)
       setIsDialogOpen(false)
       setEditingEvent(null)
-
-      toast({
-        title: "Событие обновлено",
-        description: "Изменения успешно сохранены",
-      })
     },
     [updateEvent],
   )
 
   const handleDelete = useCallback(
-    (id: string) => {
-      // Оптимистично удаляем событие
-      deleteEvent(id)
-
-      toast({
-        title: "Событие удалено",
-        description: "Событие успешно удалено",
-      })
+    async (id: string) => {
+      await deleteEvent(id)
     },
     [deleteEvent],
   )
 
   const handleArchive = useCallback(
-    (id: string) => {
-      // Оптимистично архивируем событие
-      archiveEvent(id)
-
-      toast({
-        title: "Событие архивировано",
-        description: "Событие перемещено в архив",
-      })
+    async (id: string) => {
+      await archiveEvent(id)
     },
     [archiveEvent],
   )
@@ -118,9 +108,9 @@ export default function EventsPage() {
                 placeholder="Название события"
                 className="h-11 flex-1"
               />
-              <Button onClick={handleCreate} className="h-11">
+              <Button onClick={handleCreate} className="h-11" disabled={!newTitle.trim() || isCreating}>
                 <Plus className="h-4 w-4 mr-2" />
-                Создать
+                {isCreating ? "Создание..." : "Создать"}
               </Button>
             </div>
           </Card>

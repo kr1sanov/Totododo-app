@@ -217,6 +217,7 @@ export function CalendarView() {
           description: "Не удалось сохранить элемент",
           variant: "destructive",
         })
+        throw error
       }
     },
     [addEvent, addProject, addTask, forceUpdate, projects, selectedItem, updateEvent, updateTask],
