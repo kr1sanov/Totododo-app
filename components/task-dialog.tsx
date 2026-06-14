@@ -18,9 +18,10 @@ import { SubtaskItem } from "@/components/subtask-item"
 import { TagSelector } from "@/components/tag-selector"
 
 interface TaskDialogProps {
-  open: boolean
+  open?: boolean
+  isOpen?: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (task: Task) => void
+  onSubmit: (task: Task) => void | Promise<void>
   task?: Task
   projectId: string
   availableTags?: Tag[]
@@ -29,6 +30,7 @@ interface TaskDialogProps {
 
 export function TaskDialog({
   open,
+  isOpen,
   onOpenChange,
   onSubmit,
   task,
@@ -36,6 +38,7 @@ export function TaskDialog({
   availableTags = [],
   isSubmitting = false,
 }: TaskDialogProps) {
+  const dialogOpen = open ?? isOpen ?? false
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [status, setStatus] = useState<TaskStatus>("todo")
@@ -64,7 +67,7 @@ export function TaskDialog({
       setSubtasks([])
       setTags([])
     }
-  }, [task, open])
+  }, [dialogOpen, task])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -81,8 +84,9 @@ export function TaskDialog({
       updatedAt: new Date().toISOString(),
       dueDate: dueDate ? dueDate.toISOString() : undefined,
       priority,
-      subtasks: subtasks.length > 0 ? subtasks : undefined,
-      tags: tags.length > 0 ? tags : undefined,
+      completed: task?.completed ?? status === "done",
+      subtasks,
+      tags,
     }
 
     // Submit the task for optimistic update
@@ -120,7 +124,7 @@ export function TaskDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={dialogOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{task ? "Edit Task" : "Create Task"}</DialogTitle>

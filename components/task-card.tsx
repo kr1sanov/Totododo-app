@@ -6,18 +6,16 @@ import type { Task, TaskStatus } from "@/types"
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
-import { CheckCircle2, Circle, Clock, ArchiveIcon, AlertCircle } from "lucide-react"
+import { ArchiveIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { useSwipeable } from "react-swipeable"
 import type React from "react"
-import { useRef } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MoreHorizontal, Calendar, MapPin, ArrowLeft, Pencil, Trash, LinkIcon } from "lucide-react"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { MoreHorizontal, Calendar, MapPin, Pencil, Trash } from "lucide-react"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Progress } from "@/components/ui/progress"
-import { TaskDialog } from "@/components/task-dialog"
 
 interface TaskCardProps {
   task: Task
@@ -25,28 +23,15 @@ interface TaskCardProps {
   onDelete: () => void
   onArchive: () => void
   onStatusChange: (status: TaskStatus) => void
-  projectId: string
-  onUpdate?: (taskId: string, updatedTask: Partial<Task>) => void
-  onDelete?: (taskId: string) => void
 }
 
-export function TaskCard({ task, onEdit, onDelete, onArchive, onStatusChange, projectId, onUpdate }: TaskCardProps) {
-  const [showActions, setShowActions] = useState(false)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
+export function TaskCard({ task, onEdit, onDelete, onArchive, onStatusChange }: TaskCardProps) {
+  const [, setShowActions] = useState(false)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-
-  const statusIcon = {
-    todo: <Circle className="h-5 w-5 text-muted-foreground" />,
-    "in-progress": <Clock className="h-5 w-5 text-blue-500" />,
-    done: <CheckCircle2 className="h-5 w-5 text-green-500" />,
-    blocked: <AlertCircle className="h-5 w-5 text-red-500" />,
-  }
 
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => setShowActions(true),
     onSwipedRight: () => setShowActions(false),
-    preventDefaultTouchmoveEvent: true,
     trackMouse: true,
   })
 
@@ -80,7 +65,10 @@ export function TaskCard({ task, onEdit, onDelete, onArchive, onStatusChange, pr
     <>
       <Card
         {...swipeHandlers}
-        className={cn("relative cursor-pointer transition-all", task.completed && "opacity-60")}
+        className={cn(
+          "relative cursor-pointer border-white/10 bg-card/80 shadow-[0_20px_60px_-28px_rgba(0,0,0,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/15 hover:shadow-[0_24px_70px_-28px_rgba(0,0,0,0.7)] backdrop-blur-xl",
+          task.completed && "opacity-60",
+        )}
         onClick={() => setIsSheetOpen(true)}
       >
         <CardContent className="p-4">
@@ -115,8 +103,8 @@ export function TaskCard({ task, onEdit, onDelete, onArchive, onStatusChange, pr
                 {task.tags && task.tags.length > 0 && (
                   <div className="flex gap-1">
                     {task.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary">
-                        {tag}
+                      <Badge key={tag.id} variant="secondary">
+                        {tag.name}
                       </Badge>
                     ))}
                   </div>
@@ -130,7 +118,7 @@ export function TaskCard({ task, onEdit, onDelete, onArchive, onStatusChange, pr
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                <DropdownMenuItem onClick={() => setIsDialogOpen(true)}>Изменить</DropdownMenuItem>
+                <DropdownMenuItem onClick={onEdit}>Изменить</DropdownMenuItem>
                 <DropdownMenuItem onClick={onArchive}>Архивировать</DropdownMenuItem>
                 <DropdownMenuItem onClick={onDelete} className="text-destructive">
                   Удалить
@@ -142,7 +130,7 @@ export function TaskCard({ task, onEdit, onDelete, onArchive, onStatusChange, pr
       </Card>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent side="bottom" className="h-[80vh]">
+        <SheetContent side="bottom" className="h-[80vh] rounded-t-3xl border-t border-white/10 bg-background/95 backdrop-blur-xl">
           <SheetHeader>
             <SheetTitle>{task.title}</SheetTitle>
           </SheetHeader>
@@ -150,12 +138,12 @@ export function TaskCard({ task, onEdit, onDelete, onArchive, onStatusChange, pr
             <div className="flex gap-2">
               <Badge className={priorityColors[task.priority]}>{priorityLabels[task.priority]}</Badge>
               <Badge variant={task.completed ? "default" : "secondary"}>
-                {task.completed ? "Выполнено" : "В процессе"}
+              {task.completed ? "Выполнено" : "В процессе"}
               </Badge>
               {task.tags &&
                 task.tags.map((tag) => (
-                  <Badge key={tag} variant="outline">
-                    {tag}
+                  <Badge key={tag.id} variant="outline">
+                    {tag.name}
                   </Badge>
                 ))}
             </div>
@@ -213,7 +201,7 @@ export function TaskCard({ task, onEdit, onDelete, onArchive, onStatusChange, pr
             <Button variant="outline" className="flex-1" onClick={() => onStatusChange(task.completed ? "todo" : "done")}>
               {task.completed ? "Не выполнено" : "Выполнено"}
             </Button>
-            <Button variant="outline" onClick={() => setIsDialogOpen(true)}>
+            <Button variant="outline" onClick={onEdit}>
               <Pencil className="h-4 w-4" />
             </Button>
             <Button variant="outline" onClick={onArchive}>
@@ -225,8 +213,6 @@ export function TaskCard({ task, onEdit, onDelete, onArchive, onStatusChange, pr
           </div>
         </SheetContent>
       </Sheet>
-
-      <TaskDialog isOpen={isDialogOpen} onOpenChange={setIsDialogOpen} projectId={projectId} task={task} />
     </>
   )
 }

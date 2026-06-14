@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge"
 import { CheckCircle, Clock, AlertTriangle, Tag } from "lucide-react"
 import { format, isAfter, isBefore, addDays } from "date-fns"
 import { ru } from "date-fns/locale"
+import type { Project, Tag as TaskTag } from "@/types"
 
 interface ProjectStatisticsProps {
-  project: any
+  project: Project
 }
 
 export function ProjectStatistics({ project }: ProjectStatisticsProps) {
@@ -18,23 +19,21 @@ export function ProjectStatistics({ project }: ProjectStatisticsProps) {
 
   // Общая статистика
   const totalTasks = project.tasks.length
-  const completedTasks = project.tasks.filter((task: any) => task.completed).length
+  const completedTasks = project.tasks.filter((task) => task.completed).length
   const activeTasks = totalTasks - completedTasks
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
 
   // Статистика по приоритетам
-  const highPriorityTasks = project.tasks.filter((task: any) => task.priority === "high").length
-  const mediumPriorityTasks = project.tasks.filter((task: any) => task.priority === "medium").length
-  const lowPriorityTasks = project.tasks.filter((task: any) => task.priority === "low").length
+  const highPriorityTasks = project.tasks.filter((task) => task.priority === "high").length
+  const mediumPriorityTasks = project.tasks.filter((task) => task.priority === "medium").length
+  const lowPriorityTasks = project.tasks.filter((task) => task.priority === "low").length
 
   // Статистика по срокам
   const now = new Date()
-  const overdueTasks = project.tasks.filter(
-    (task: any) => !task.completed && task.dueDate && isBefore(new Date(task.dueDate), now),
-  ).length
+  const overdueTasks = project.tasks.filter((task) => !task.completed && task.dueDate && isBefore(new Date(task.dueDate), now)).length
 
   const dueSoonTasks = project.tasks.filter(
-    (task: any) =>
+    (task) =>
       !task.completed &&
       task.dueDate &&
       isAfter(new Date(task.dueDate), now) &&
@@ -42,16 +41,19 @@ export function ProjectStatistics({ project }: ProjectStatisticsProps) {
   ).length
 
   // Статистика по тегам
-  const allTags = Array.from(
-    new Set(project.tasks.filter((task: any) => task.tags && task.tags.length > 0).flatMap((task: any) => task.tags)),
-  )
+  const allTags = project.tasks.flatMap((task) => task.tags ?? []).reduce((unique: TaskTag[], tag) => {
+    if (!unique.some((existingTag) => existingTag.id === tag.id)) {
+      unique.push(tag)
+    }
+    return unique
+  }, [])
 
   const tagStats = allTags
     .map((tag) => {
-      const tasksWithTag = project.tasks.filter((task: any) => task.tags && task.tags.includes(tag)).length
+      const tasksWithTag = project.tasks.filter((task) => task.tags?.some((taskTag) => taskTag.id === tag.id)).length
 
       const completedTasksWithTag = project.tasks.filter(
-        (task: any) => task.completed && task.tags && task.tags.includes(tag),
+        (task) => task.completed && task.tags?.some((taskTag) => taskTag.id === tag.id),
       ).length
 
       const completionRate = tasksWithTag > 0 ? Math.round((completedTasksWithTag / tasksWithTag) * 100) : 0
@@ -226,11 +228,11 @@ export function ProjectStatistics({ project }: ProjectStatisticsProps) {
             {tagStats.length > 0 ? (
               <div className="space-y-3">
                 {tagStats.map((stat) => (
-                  <div key={stat.tag} className="space-y-1">
+                  <div key={stat.tag.id} className="space-y-1">
                     <div className="flex justify-between text-sm">
                       <div className="flex items-center gap-2">
                         <Tag className="h-3 w-3" />
-                        <span>{stat.tag}</span>
+                        <span>{stat.tag.name}</span>
                       </div>
                       <span>
                         {stat.completedCount}/{stat.tasksCount} ({stat.completionRate}%)

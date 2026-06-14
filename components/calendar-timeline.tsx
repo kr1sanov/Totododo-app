@@ -181,7 +181,8 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
 
   // Обновление видимого месяца при прокрутке
   useEffect(() => {
-    if (!timelineRef.current || !onMonthChange) return
+    const timeline = timelineRef.current
+    if (!timeline || !onMonthChange) return
 
     const handleScroll = () => {
       if (scrollTimeoutRef.current) {
@@ -189,15 +190,15 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
       }
 
       scrollTimeoutRef.current = setTimeout(() => {
-        if (!timelineRef.current) return
+        if (!timeline) return
 
         // Находим все заголовки месяцев
         const monthHeaders = document.querySelectorAll("[data-month-header]")
         if (monthHeaders.length === 0) return
 
         // Определяем видимую область
-        const scrollTop = timelineRef.current.scrollTop
-        const clientHeight = timelineRef.current.clientHeight
+        const scrollTop = timeline.scrollTop
+        const clientHeight = timeline.clientHeight
         const viewportMiddle = scrollTop + clientHeight / 2
 
         // Находим ближайший к центру экрана заголовок месяца
@@ -207,7 +208,7 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
         for (let i = 0; i < monthHeaders.length; i++) {
           const header = monthHeaders[i]
           const rect = header.getBoundingClientRect()
-          const headerMiddle = rect.top + rect.height / 2 + scrollTop - timelineRef.current.offsetTop
+          const headerMiddle = rect.top + rect.height / 2 + scrollTop - timeline.offsetTop
           const distance = Math.abs(headerMiddle - viewportMiddle)
 
           if (distance < minDistance) {
@@ -227,15 +228,13 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
     }
 
     // Добавляем обработчик скролла
-    timelineRef.current.addEventListener("scroll", handleScroll)
+    timeline.addEventListener("scroll", handleScroll)
 
     // Вызываем обработчик один раз после монтирования для установки начального месяца
     setTimeout(handleScroll, 300)
 
     return () => {
-      if (timelineRef.current) {
-        timelineRef.current.removeEventListener("scroll", handleScroll)
-      }
+      timeline.removeEventListener("scroll", handleScroll)
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current)
       }

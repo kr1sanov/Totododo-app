@@ -7,7 +7,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getNotificationSettings, saveNotificationSettings, sendTelegramMessage } from "@/lib/telegram-service"
+import {
+  getNotificationSettings,
+  saveNotificationSettings,
+  sendTelegramMessage,
+  type NotificationSettings,
+} from "@/lib/telegram-service"
 import { toast } from "@/components/ui/use-toast"
 import { isClient } from "@/lib/storage-utils"
 
@@ -17,7 +22,7 @@ interface NotificationSettingsDialogProps {
 }
 
 export function NotificationSettingsDialog({ isOpen, onClose }: NotificationSettingsDialogProps) {
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<NotificationSettings>({
     enabled: false,
     chatId: undefined,
     eventReminders: true,

@@ -43,6 +43,8 @@ interface CalendarItemDialogProps {
   type: "event" | "task"
   item?: CalendarItem
   onSave: (item: CalendarItem) => void
+  onArchive?: (id: string) => void
+  onDelete?: (id: string, deleteAll: boolean) => void
 }
 
 export function CalendarItemDialog({ isOpen, onClose, date, type, item, onSave }: CalendarItemDialogProps) {

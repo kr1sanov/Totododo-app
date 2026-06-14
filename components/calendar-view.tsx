@@ -103,7 +103,7 @@ export function CalendarView() {
         })
       }
     },
-    [selectedItem, addItem, updateItem, forceUpdate, toast],
+    [selectedItem, addItem, updateItem, forceUpdate],
   )
 
   // Обработчик удаления
@@ -131,7 +131,7 @@ export function CalendarView() {
         })
       }
     },
-    [deleteItem, deleteRecurringItem, forceUpdate, toast],
+    [deleteItem, deleteRecurringItem, forceUpdate],
   )
 
   // Обработчик архивирования
@@ -155,7 +155,7 @@ export function CalendarView() {
         })
       }
     },
-    [archiveItem, forceUpdate, toast],
+    [archiveItem, forceUpdate],
   )
 
   // Функция для закрытия карточки элемента

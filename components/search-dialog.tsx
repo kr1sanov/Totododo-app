@@ -193,7 +193,9 @@ export function SearchDialog({ isOpen, onClose }: SearchDialogProps) {
               ))}
             </div>
           ) : searchQuery ? (
-            <div className="text-center py-8 text-muted-foreground">Ничего не найдено по запросу "{searchQuery}"</div>
+            <div className="text-center py-8 text-muted-foreground">
+              Ничего не найдено по запросу &quot;{searchQuery}&quot;
+            </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">Введите запрос для поиска</div>
           )}

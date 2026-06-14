@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { useProjects } from "@/hooks/use-projects"
-import { useAuth } from "@/contexts/auth-context"
 import { TaskCard } from "@/components/task-card"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
@@ -18,8 +17,7 @@ interface ProjectDetailsProps {
 }
 
 export function ProjectDetails({ projectId }: ProjectDetailsProps) {
-  const { user } = useAuth()
-  const { projects, getProject, addTask, updateTask, deleteTask, archiveTask } = useProjects(user?.id)
+  const { getProject, addTask, updateTask, deleteTask, archiveTask } = useProjects()
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | null>(null)
@@ -70,7 +68,7 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
   const handleUpdateTask = async (task: Task) => {
     setIsSubmitting(true)
     try {
-      await updateTask(projectId, task)
+      await updateTask(projectId, task.id, task)
       setEditingTask(null)
     } catch (error) {
       toast({
@@ -113,7 +111,10 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
 
   const handleStatusChange = async (task: Task, status: TaskStatus) => {
     try {
-      await updateTask(projectId, { ...task, status })
+      await updateTask(projectId, task.id, {
+        status,
+        completed: status === "done",
+      })
     } catch (error) {
       toast({
         title: "Ошибка",
@@ -172,7 +173,7 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
       </div>
 
       <TaskDialog
-        isOpen={isTaskDialogOpen}
+        open={isTaskDialogOpen}
         onOpenChange={(open) => !open && setIsTaskDialogOpen(false)}
         onSubmit={handleCreateTask}
         projectId={projectId}
@@ -182,7 +183,7 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
 
       {editingTask && (
         <TaskDialog
-          isOpen={!!editingTask}
+          open={!!editingTask}
           onOpenChange={(open) => !open && setEditingTask(null)}
           onSubmit={handleUpdateTask}
           task={editingTask}

@@ -9,10 +9,11 @@ import { EventDialog } from "@/components/event-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { MoreHorizontal, Calendar, MapPin, Clock, ArrowLeft, Pencil, Trash } from "lucide-react"
-import { useEvents, Event as CalendarEvent } from "@/hooks/use-events"
+import { useEvents } from "@/hooks/use-events"
 import { ru } from "date-fns/locale"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { toast } from "@/components/ui/use-toast"
+import type { Event as CalendarEvent } from "@/types"
 
 interface EventCardProps {
   event: CalendarEvent
@@ -95,12 +96,12 @@ export function EventCard({ event, onClose }: EventCardProps) {
     <>
       <Sheet>
         <SheetTrigger asChild>
-          <Card className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow">
+          <Card className="overflow-hidden border-white/10 bg-card/80 shadow-[0_20px_60px_-28px_rgba(0,0,0,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/15 hover:shadow-[0_24px_70px_-28px_rgba(0,0,0,0.7)] backdrop-blur-xl">
             <CardContent className="p-3">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <h3 className="font-medium">{event.title}</h3>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="mt-1 text-sm text-muted-foreground">
                     {formatTime(startDate)} - {formatTime(endDate)}
                   </div>
                   {event.location && <div className="text-sm mt-1 truncate">{event.location}</div>}
@@ -124,8 +125,8 @@ export function EventCard({ event, onClose }: EventCardProps) {
             </CardContent>
           </Card>
         </SheetTrigger>
-        <SheetContent side="bottom" className="h-[90vh] rounded-t-xl">
-          <SheetHeader className="text-left border-b pb-4 mb-4 relative">
+        <SheetContent side="bottom" className="h-[90vh] rounded-t-3xl border-t border-white/10 bg-background/95 backdrop-blur-xl">
+          <SheetHeader className="relative mb-4 border-b border-white/10 pb-4 text-left">
             <Button variant="ghost" size="icon" className="absolute left-0 top-0">
               <ArrowLeft className="h-4 w-4" />
             </Button>

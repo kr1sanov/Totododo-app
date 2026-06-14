@@ -14,15 +14,17 @@ import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { useEvents } from "@/hooks/use-events"
+import type { Event } from "@/types"
 
 interface EventDialogProps {
   isOpen: boolean
   onClose: () => void
   date: Date
-  event?: any
+  event?: Event
+  onSave?: (event: Event) => void | Promise<void>
 }
 
-export function EventDialog({ isOpen, onClose, date, event }: EventDialogProps) {
+export function EventDialog({ isOpen, onClose, date, event, onSave }: EventDialogProps) {
   const [title, setTitle] = useState(event?.title || "")
   const [startDate, setStartDate] = useState<Date>(event?.startDate ? new Date(event.startDate) : date)
   const [endDate, setEndDate] = useState<Date>(
@@ -59,17 +61,19 @@ export function EventDialog({ isOpen, onClose, date, event }: EventDialogProps) 
   const handleSubmit = () => {
     if (!title.trim()) return
 
-    const eventData = {
+    const eventData: Event = {
       id: event?.id || Date.now().toString(),
       title,
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
       location,
       description,
-      repeatType,
+      repeatType: repeatType as Event["repeatType"],
     }
 
-    if (event) {
+    if (onSave) {
+      onSave(eventData)
+    } else if (event) {
       updateEvent(eventData)
     } else {
       addEvent(eventData)
@@ -189,7 +193,10 @@ export function EventDialog({ isOpen, onClose, date, event }: EventDialogProps) 
 
           <div className="grid gap-2">
             <Label>Повторяемость</Label>
-            <RadioGroup value={repeatType} onValueChange={setRepeatType}>
+            <RadioGroup
+              value={repeatType}
+              onValueChange={(value) => setRepeatType(value as "none" | "daily" | "weekly" | "monthly")}
+            >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="none" id="none" />
                 <Label htmlFor="none">Не повторять</Label>

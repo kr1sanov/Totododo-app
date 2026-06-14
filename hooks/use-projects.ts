@@ -3,38 +3,122 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
+import { getFromStorage, saveToStorage } from "@/lib/storage-utils"
 import { toast } from "@/components/ui/use-toast"
-import { sendNotification } from "@/lib/notifications"
+import type { Project, Tag, Task, TaskStatus, Subtask } from "@/types"
 
-export interface Subtask {
-  id: string
-  title: string
-  description?: string
-  dueDate?: string
-  link?: string
-  completed: boolean
-  createdAt: string
+function normalizeTag(tag: unknown): Tag | null {
+  if (!tag || typeof tag !== "object") {
+    return null
+  }
+
+  const value = tag as Partial<Tag>
+  if (!value.id || !value.name || !value.color) {
+    return null
+  }
+
+  return {
+    id: String(value.id),
+    name: String(value.name),
+    color: String(value.color),
+  }
 }
 
-export interface Task {
-  id: string
-  title: string
-  description?: string
-  dueDate?: string
-  priority: "low" | "medium" | "high"
-  completed: boolean
-  location?: string
-  subtasks: Subtask[]
-  createdAt: string
-  tags?: string[]
+function normalizeSubtask(subtask: unknown): Subtask | null {
+  if (!subtask || typeof subtask !== "object") {
+    return null
+  }
+
+  const value = subtask as Partial<Subtask>
+  if (!value.id || !value.title) {
+    return null
+  }
+
+  return {
+    id: String(value.id),
+    title: String(value.title),
+    completed: Boolean(value.completed),
+    description: value.description ? String(value.description) : undefined,
+    dueDate: value.dueDate ? String(value.dueDate) : undefined,
+    link: value.link ? String(value.link) : undefined,
+    createdAt: value.createdAt ? String(value.createdAt) : undefined,
+  }
 }
 
-export interface Project {
-  id: string
-  name: string
-  tasks: Task[]
-  createdAt: string
-  user_id: string
+function normalizeTask(task: unknown, projectId: string): Task | null {
+  if (!task || typeof task !== "object") {
+    return null
+  }
+
+  const value = task as Record<string, unknown>
+  if (!value.id || !value.title) {
+    return null
+  }
+
+  const completed = Boolean(value.completed)
+  const rawStatus = typeof value.status === "string" ? value.status : undefined
+  const status: TaskStatus =
+    rawStatus === "todo" || rawStatus === "in-progress" || rawStatus === "done" || rawStatus === "blocked"
+      ? rawStatus
+      : completed
+        ? "done"
+        : "todo"
+
+  return {
+    id: String(value.id),
+    title: String(value.title),
+    description: value.description ? String(value.description) : undefined,
+    status,
+    projectId,
+    createdAt: value.createdAt ? String(value.createdAt) : new Date().toISOString(),
+    updatedAt: value.updatedAt ? String(value.updatedAt) : value.createdAt ? String(value.createdAt) : new Date().toISOString(),
+    dueDate: value.dueDate ? String(value.dueDate) : undefined,
+    priority: value.priority === "low" || value.priority === "high" ? value.priority : "medium",
+    tags: Array.isArray(value.tags) ? value.tags.map(normalizeTag).filter(Boolean) as Tag[] : [],
+    completed,
+    subtasks: Array.isArray(value.subtasks)
+      ? value.subtasks.map(normalizeSubtask).filter(Boolean) as Subtask[]
+      : [],
+    location: value.location ? String(value.location) : undefined,
+    files: Array.isArray(value.files)
+      ? value.files
+          .filter((file): file is { name: string; url: string } => {
+            return Boolean(file && typeof file === "object" && "name" in file && "url" in file)
+          })
+          .map((file) => ({ name: String(file.name), url: String(file.url) }))
+      : [],
+  }
+}
+
+function normalizeProject(project: Record<string, unknown>): Project {
+  const projectId = String(project.id)
+  const tasks = Array.isArray(project.tasks)
+    ? project.tasks.map((task) => normalizeTask(task, projectId)).filter(Boolean) as Task[]
+    : []
+
+  return {
+    id: projectId,
+    name: String(project.name ?? "Без названия"),
+    description: project.description ? String(project.description) : undefined,
+    tasks,
+    createdAt: project.created_at ? String(project.created_at) : new Date().toISOString(),
+    updatedAt: project.updated_at ? String(project.updated_at) : undefined,
+    userId: project.user_id ? String(project.user_id) : undefined,
+  }
+}
+
+function addArchivedItem(id: string, title: string, type: string, item: unknown) {
+  const archivedItems = getFromStorage("totododo-archive", [] as unknown[])
+  saveToStorage("totododo-archive", [
+    ...archivedItems,
+    {
+      id,
+      title,
+      type,
+      archivedAt: new Date().toISOString(),
+      item,
+    },
+  ])
 }
 
 export function useProjects() {
@@ -42,9 +126,8 @@ export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Load projects from Supabase
   const loadProjects = useCallback(async () => {
-    if (!user?.telegramId) {
+    if (!user?.id) {
       setProjects([])
       setIsLoading(false)
       return
@@ -52,24 +135,18 @@ export function useProjects() {
 
     try {
       const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('user_id', user.telegramId)
-        .order('created_at', { ascending: true })
+        .from("projects")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
 
-      if (error) throw error
+      if (error) {
+        throw error
+      }
 
-      const parsedProjects = (data || []).map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        tasks: row.tasks || [],
-        createdAt: row.created_at,
-        user_id: row.user_id
-      }))
-
-      setProjects(parsedProjects)
+      setProjects((data ?? []).map((project) => normalizeProject(project)))
     } catch (error) {
-      console.error('Error loading projects:', error)
+      console.error("Error loading projects:", error)
       toast({
         title: "Ошибка загрузки",
         description: "Не удалось загрузить проекты",
@@ -78,269 +155,300 @@ export function useProjects() {
     } finally {
       setIsLoading(false)
     }
-  }, [user])
+  }, [user?.id])
 
   useEffect(() => {
     loadProjects()
   }, [loadProjects])
 
-  // Subscribe to realtime changes
   useEffect(() => {
-    if (!user?.telegramId) return
+    if (!user?.id) {
+      return
+    }
 
     const channel = supabase
-      .channel('projects-changes')
+      .channel("projects-changes")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'projects',
-          filter: `user_id=eq.${user.telegramId}`
+          event: "*",
+          schema: "public",
+          table: "projects",
+          filter: `user_id=eq.${user.id}`,
         },
         () => {
           loadProjects()
-        }
+        },
       )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user, loadProjects])
+  }, [loadProjects, user?.id])
 
   const getProject = useCallback(
     (projectId: string) => {
-      return projects.find((p) => p.id === projectId)
+      return projects.find((project) => project.id === projectId)
     },
-    [projects]
+    [projects],
   )
 
   const addProject = useCallback(
     async (name: string) => {
-      if (!user?.telegramId) return
+      if (!user?.id) {
+        return null
+      }
 
+      const now = new Date().toISOString()
       const newProject: Project = {
         id: crypto.randomUUID(),
-        name,
+        name: name.trim(),
         tasks: [],
-        createdAt: new Date().toISOString(),
-        user_id: user.telegramId.toString()
+        createdAt: now,
+        updatedAt: now,
+        userId: user.id,
       }
 
       try {
-        const { error } = await supabase
-          .from('projects')
-          .insert({
-            id: newProject.id,
-            name: newProject.name,
-            tasks: newProject.tasks,
-            created_at: newProject.createdAt,
-            user_id: newProject.user_id
-          })
+        const { error } = await supabase.from("projects").insert({
+          id: newProject.id,
+          name: newProject.name,
+          description: newProject.description,
+          tasks: [],
+          created_at: newProject.createdAt,
+          updated_at: newProject.updatedAt,
+          user_id: user.id,
+        })
 
-        if (error) throw error
+        if (error) {
+          throw error
+        }
+
+        setProjects((currentProjects) => [...currentProjects, newProject])
 
         toast({
           title: "Проект создан",
-          description: `Проект "${name}" успешно создан`,
+          description: `Проект "${newProject.name}" успешно создан`,
         })
+
+        return newProject
       } catch (error) {
-        console.error('Error adding project:', error)
+        console.error("Error adding project:", error)
         toast({
           title: "Ошибка",
           description: "Не удалось создать проект",
           variant: "destructive",
         })
+        throw error
       }
     },
-    [user]
+    [user?.id],
   )
 
   const updateProject = useCallback(
     async (projectId: string, updates: Partial<Project>) => {
-      if (!user?.telegramId) return
+      if (!user?.id) {
+        return null
+      }
+
+      const currentProject = projects.find((project) => project.id === projectId)
+      if (!currentProject) {
+        return null
+      }
+
+      const updatedProject: Project = {
+        ...currentProject,
+        ...updates,
+        id: currentProject.id,
+        tasks: updates.tasks ?? currentProject.tasks,
+        updatedAt: new Date().toISOString(),
+      }
 
       try {
         const { error } = await supabase
-          .from('projects')
+          .from("projects")
           .update({
-            name: updates.name,
-            tasks: updates.tasks,
+            name: updatedProject.name,
+            description: updatedProject.description,
+            tasks: updatedProject.tasks,
+            updated_at: updatedProject.updatedAt,
           })
-          .eq('id', projectId)
-          .eq('user_id', user.telegramId)
+          .eq("id", projectId)
+          .eq("user_id", user.id)
 
-        if (error) throw error
+        if (error) {
+          throw error
+        }
 
-        toast({
-          title: "Проект обновлен",
-          description: "Изменения сохранены",
-        })
+        setProjects((currentProjects) =>
+          currentProjects.map((project) => (project.id === projectId ? updatedProject : project)),
+        )
+
+        return updatedProject
       } catch (error) {
-        console.error('Error updating project:', error)
+        console.error("Error updating project:", error)
         toast({
           title: "Ошибка",
           description: "Не удалось обновить проект",
           variant: "destructive",
         })
+        throw error
       }
     },
-    [user]
+    [projects, user?.id],
   )
 
   const deleteProject = useCallback(
     async (projectId: string) => {
-      if (!user?.telegramId) return
+      if (!user?.id) {
+        return null
+      }
 
       try {
-        const { error } = await supabase
-          .from('projects')
-          .delete()
-          .eq('id', projectId)
-          .eq('user_id', user.telegramId)
+        const { error } = await supabase.from("projects").delete().eq("id", projectId).eq("user_id", user.id)
 
-        if (error) throw error
+        if (error) {
+          throw error
+        }
+
+        setProjects((currentProjects) => currentProjects.filter((project) => project.id !== projectId))
 
         toast({
           title: "Проект удален",
           description: "Проект успешно удален",
         })
+
+        return projectId
       } catch (error) {
-        console.error('Error deleting project:', error)
+        console.error("Error deleting project:", error)
         toast({
           title: "Ошибка",
           description: "Не удалось удалить проект",
           variant: "destructive",
         })
+        throw error
       }
     },
-    [user]
+    [user?.id],
+  )
+
+  const archiveProject = useCallback(
+    async (projectId: string) => {
+      const project = getProject(projectId)
+      if (!project) {
+        return null
+      }
+
+      addArchivedItem(project.id, project.name, "projects", project)
+      await deleteProject(projectId)
+      return project
+    },
+    [deleteProject, getProject],
   )
 
   const addTask = useCallback(
-    async (
-      projectId: string,
-      task: Omit<Task, "id" | "createdAt">
-    ) => {
+    async (projectId: string, task: Omit<Task, "id" | "createdAt" | "updatedAt"> | Task) => {
       const project = getProject(projectId)
-      if (!project || !user?.telegramId) return
+      if (!project) {
+        return null
+      }
 
+      const now = new Date().toISOString()
       const newTask: Task = {
         ...task,
-        id: crypto.randomUUID(),
-        createdAt: new Date().toISOString(),
+        id: "id" in task && task.id ? task.id : crypto.randomUUID(),
+        projectId,
+        createdAt: "createdAt" in task && task.createdAt ? task.createdAt : now,
+        updatedAt: now,
+        status: task.status ?? (task.completed ? "done" : "todo"),
+        completed: task.completed ?? task.status === "done",
+        priority: task.priority ?? "medium",
+        subtasks: task.subtasks ?? [],
+        tags: task.tags ?? [],
       }
 
-      const updatedTasks = [...project.tasks, newTask]
+      await updateProject(projectId, {
+        tasks: [...project.tasks, newTask],
+      })
 
-      try {
-        const { error } = await supabase
-          .from('projects')
-          .update({ tasks: updatedTasks })
-          .eq('id', projectId)
-          .eq('user_id', user.telegramId)
+      toast({
+        title: "Задача создана",
+        description: `Задача "${newTask.title}" добавлена`,
+      })
 
-        if (error) throw error
-
-        toast({
-          title: "Задача создана",
-          description: `Задача "${task.title}" добавлена`,
-        })
-
-        if (user.telegramId) {
-          sendNotification(
-            user.telegramId.toString(),
-            `Создана новая задача: ${task.title}`
-          )
-        }
-      } catch (error) {
-        console.error('Error adding task:', error)
-        toast({
-          title: "Ошибка",
-          description: "Не удалось создать задачу",
-          variant: "destructive",
-        })
-      }
+      return newTask
     },
-    [getProject, user]
+    [getProject, updateProject],
   )
 
   const updateTask = useCallback(
-    async (
-      projectId: string,
-      taskId: string,
-      updates: Partial<Task>
-    ) => {
+    async (projectId: string, taskId: string, updates: Partial<Task>) => {
       const project = getProject(projectId)
-      if (!project || !user?.telegramId) return
-
-      const updatedTasks = project.tasks.map((task) =>
-        task.id === taskId ? { ...task, ...updates } : task
-      )
-
-      try {
-        const { error } = await supabase
-          .from('projects')
-          .update({ tasks: updatedTasks })
-          .eq('id', projectId)
-          .eq('user_id', user.telegramId)
-
-        if (error) throw error
-
-        if (updates.completed !== undefined && user.telegramId) {
-          const task = project.tasks.find(t => t.id === taskId)
-          if (task) {
-            sendNotification(
-              user.telegramId.toString(),
-              updates.completed
-                ? `Задача выполнена: ${task.title}`
-                : `Задача отмечена как невыполненная: ${task.title}`
-            )
-          }
-        }
-      } catch (error) {
-        console.error('Error updating task:', error)
-        toast({
-          title: "Ошибка",
-          description: "Не удалось обновить задачу",
-          variant: "destructive",
-        })
+      if (!project) {
+        return null
       }
+
+      const currentTask = project.tasks.find((task) => task.id === taskId)
+      if (!currentTask) {
+        return null
+      }
+
+      const updatedTask: Task = {
+        ...currentTask,
+        ...updates,
+        id: currentTask.id,
+        projectId,
+        updatedAt: new Date().toISOString(),
+      }
+
+      if (updates.status) {
+        updatedTask.completed = updates.status === "done"
+      }
+
+      await updateProject(projectId, {
+        tasks: project.tasks.map((task) => (task.id === taskId ? updatedTask : task)),
+      })
+
+      return updatedTask
     },
-    [getProject, user]
+    [getProject, updateProject],
   )
 
   const deleteTask = useCallback(
     async (projectId: string, taskId: string) => {
       const project = getProject(projectId)
-      if (!project || !user?.telegramId) return
-
-      const updatedTasks = project.tasks.filter((task) => task.id !== taskId)
-
-      try {
-        const { error } = await supabase
-          .from('projects')
-          .update({ tasks: updatedTasks })
-          .eq('id', projectId)
-          .eq('user_id', user.telegramId)
-
-        if (error) throw error
-
-        toast({
-          title: "Задача удалена",
-          description: "Задача успешно удалена",
-        })
-      } catch (error) {
-        console.error('Error deleting task:', error)
-        toast({
-          title: "Ошибка",
-          description: "Не удалось удалить задачу",
-          variant: "destructive",
-        })
+      if (!project) {
+        return null
       }
+
+      await updateProject(projectId, {
+        tasks: project.tasks.filter((task) => task.id !== taskId),
+      })
+
+      toast({
+        title: "Задача удалена",
+        description: "Задача успешно удалена",
+      })
+
+      return taskId
     },
-    [getProject, user]
+    [getProject, updateProject],
+  )
+
+  const archiveTask = useCallback(
+    async (projectId: string, taskId: string) => {
+      const project = getProject(projectId)
+      const task = project?.tasks.find((projectTask) => projectTask.id === taskId)
+      if (!project || !task) {
+        return null
+      }
+
+      addArchivedItem(task.id, task.title, "tasks", task)
+      await deleteTask(projectId, taskId)
+      return task
+    },
+    [deleteTask, getProject],
   )
 
   return {
@@ -350,8 +458,10 @@ export function useProjects() {
     addProject,
     updateProject,
     deleteProject,
+    archiveProject,
     addTask,
     updateTask,
     deleteTask,
+    archiveTask,
   }
 }

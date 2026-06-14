@@ -24,13 +24,7 @@ export function ProjectsList() {
       setIsSubmitting(true)
 
       try {
-        // Create new project with optimistic update
-        await addProject({
-          id: Date.now().toString(),
-          name: projectName,
-          tasks: [],
-          createdAt: new Date().toISOString(),
-        })
+        await addProject(projectName)
 
         // Reset form and close dialog
         setProjectName("")
@@ -76,12 +70,12 @@ export function ProjectsList() {
       <div className="grid gap-4">
         {projects.length > 0 ? (
           projects.map((project) => (
-            <Card key={project.id}>
+            <Card key={project.id} className="border-white/10 bg-card/80 shadow-[0_20px_60px_-26px_rgba(0,0,0,0.55)] backdrop-blur-xl">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <Link href={`/projects/${project.id}`} className="flex-1">
                     <div className="font-medium">{project.name}</div>
-                    <div className="text-sm text-muted-foreground">
+                    <div className="mt-1 text-sm text-muted-foreground">
                       {project.tasks.length > 0
                         ? `${project.tasks.filter((t) => t.completed).length}/${project.tasks.length} задач`
                         : "Нет задач"}
@@ -112,14 +106,14 @@ export function ProjectsList() {
             </Card>
           ))
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
+          <div className="rounded-2xl border border-dashed border-white/10 bg-card/40 px-4 py-10 text-center text-muted-foreground backdrop-blur-sm">
             У вас пока нет проектов. Создайте новый проект, чтобы начать.
           </div>
         )}
       </div>
 
       <Button
-        className="fixed bottom-20 right-4 rounded-full shadow-lg z-10 w-12 h-12 p-0"
+        className="fixed bottom-24 right-4 z-10 h-14 w-14 rounded-full shadow-[0_16px_50px_-20px_rgba(56,189,248,0.7)]"
         onClick={() => setIsDialogOpen(true)}
       >
         <Plus className="h-6 w-6" />

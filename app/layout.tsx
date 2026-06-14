@@ -1,15 +1,9 @@
 import type React from "react"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
-import { JetBrains_Mono } from "next/font/google"
 import { AuthProvider } from "@/contexts/auth-context"
 import Script from "next/script"
 import "./globals.css"
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin", "cyrillic"],
-  variable: "--font-mono",
-})
 
 export const metadata = {
   title: "Totododo — Ваш личный трекер задач",
@@ -21,10 +15,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ru" suppressHydrationWarning>
       <head>
-        {/* Telegram WebApp SDK — загружаем синхронно до основного JS */}
-        <script src="https://telegram.org/js/telegram-web-app.js" />
+        {/* Telegram WebApp SDK */}
+        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
       </head>
-      <body className={`${jetbrainsMono.variable} font-mono`}>
+      <body className="antialiased">
+        <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(120,119,198,0.16),_transparent_35%),radial-gradient(circle_at_80%_20%,_rgba(56,189,248,0.12),_transparent_25%),linear-gradient(180deg,_hsl(var(--background)),_hsl(var(--background))_55%,_hsl(var(--muted)/0.35))]" />
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <AuthProvider>
             {children}
@@ -42,7 +37,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           ym(101461440,"init",{clickmap:true,trackLinks:true,accurateTrackBounce:true,webvisor:true});
         `}</Script>
         <noscript>
-          <div><img src="https://mc.yandex.ru/watch/101461440" style={{position:"absolute",left:"-9999px"}} alt="" /></div>
+          <div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="https://mc.yandex.ru/watch/101461440"
+              style={{ position: "absolute", left: "-9999px" }}
+              alt=""
+            />
+          </div>
         </noscript>
       </body>
     </html>

@@ -1,63 +1,81 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
+import { getFromStorage, saveToStorage } from "@/lib/storage-utils"
 import { toast } from "@/components/ui/use-toast"
+import type { Event } from "@/types"
 
-export interface Event {
-  id: string
-  title: string
-  startDate: string
-  endDate: string
-  location?: string
-  description?: string
-  repeatType: "none" | "daily" | "weekly" | "monthly"
+function addArchivedEvent(event: Event) {
+  const archivedItems = getFromStorage("totododo-archive", [] as unknown[])
+  saveToStorage("totododo-archive", [
+    ...archivedItems,
+    {
+      id: event.id,
+      title: event.title,
+      type: "event",
+      archivedAt: new Date().toISOString(),
+      item: event,
+    },
+  ])
 }
 
 export function useEvents(userId?: string) {
+  const { user } = useAuth()
+  const resolvedUserId = userId ?? user?.id
   const [events, setEvents] = useState<Event[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    if (!userId) {
+  const loadEvents = useCallback(async () => {
+    if (!resolvedUserId) {
+      setEvents([])
       setIsLoading(false)
       return
     }
 
-    const loadEvents = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("events")
-          .select("*")
-          .eq("user_id", userId)
-          .order("start_date", { ascending: true })
+    try {
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .eq("user_id", resolvedUserId)
+        .order("start_date", { ascending: true })
 
-        if (error) throw error
+      if (error) {
+        throw error
+      }
 
-        const eventsData = data.map((event) => ({
+      setEvents(
+        (data ?? []).map((event) => ({
           id: event.id,
           title: event.title,
           startDate: event.start_date,
           endDate: event.end_date,
-          location: event.location || "",
-          description: event.description || "",
+          location: event.location || undefined,
+          description: event.description || undefined,
           repeatType: event.repeat_type || "none",
-        }))
-
-        setEvents(eventsData)
-      } catch (error) {
-        console.error("Error loading events:", error)
-        toast({
-          title: "Ошибка загрузки",
-          description: "Не удалось загрузить события",
-          variant: "destructive",
-        })
-      } finally {
-        setIsLoading(false)
-      }
+        })),
+      )
+    } catch (error) {
+      console.error("Error loading events:", error)
+      toast({
+        title: "Ошибка загрузки",
+        description: "Не удалось загрузить события",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
+  }, [resolvedUserId])
 
+  useEffect(() => {
     loadEvents()
+  }, [loadEvents])
+
+  useEffect(() => {
+    if (!resolvedUserId) {
+      return
+    }
 
     const subscription = supabase
       .channel("events-changes")
@@ -67,29 +85,31 @@ export function useEvents(userId?: string) {
           event: "*",
           schema: "public",
           table: "events",
-          filter: `user_id=eq.${userId}`,
+          filter: `user_id=eq.${resolvedUserId}`,
         },
         () => {
           loadEvents()
-        }
+        },
       )
       .subscribe()
 
     return () => {
       subscription.unsubscribe()
     }
-  }, [userId])
+  }, [loadEvents, resolvedUserId])
 
   const addEvent = useCallback(
     async (event: Event) => {
-      if (!userId) return null
+      if (!resolvedUserId) {
+        return null
+      }
 
       try {
         const { data, error } = await supabase
           .from("events")
           .insert({
             id: event.id,
-            user_id: userId,
+            user_id: resolvedUserId,
             title: event.title,
             start_date: event.startDate,
             end_date: event.endDate,
@@ -100,9 +120,11 @@ export function useEvents(userId?: string) {
           .select()
           .single()
 
-        if (error) throw error
+        if (error) {
+          throw error
+        }
 
-        setEvents([...events, event])
+        setEvents((currentEvents) => [...currentEvents, event])
 
         toast({
           title: "Событие создано",
@@ -117,15 +139,17 @@ export function useEvents(userId?: string) {
           description: "Не удалось создать событие",
           variant: "destructive",
         })
-        return null
+        throw error
       }
     },
-    [events, userId]
+    [resolvedUserId],
   )
 
   const updateEvent = useCallback(
     async (updatedEvent: Event) => {
-      if (!userId) return null
+      if (!resolvedUserId) {
+        return null
+      }
 
       try {
         const { error } = await supabase
@@ -139,11 +163,15 @@ export function useEvents(userId?: string) {
             repeat_type: updatedEvent.repeatType,
           })
           .eq("id", updatedEvent.id)
-          .eq("user_id", userId)
+          .eq("user_id", resolvedUserId)
 
-        if (error) throw error
+        if (error) {
+          throw error
+        }
 
-        setEvents(events.map((event) => (event.id === updatedEvent.id ? updatedEvent : event)))
+        setEvents((currentEvents) =>
+          currentEvents.map((event) => (event.id === updatedEvent.id ? updatedEvent : event)),
+        )
 
         toast({
           title: "Событие обновлено",
@@ -158,32 +186,28 @@ export function useEvents(userId?: string) {
           description: "Не удалось обновить событие",
           variant: "destructive",
         })
-        return null
+        throw error
       }
     },
-    [events, userId]
+    [resolvedUserId],
   )
 
   const deleteEvent = useCallback(
     async (id: string) => {
-      if (!userId) return null
-
-      const eventToDelete = events.find((event) => event.id === id)
-      if (!eventToDelete) return null
+      if (!resolvedUserId) {
+        return null
+      }
 
       try {
-        const { error } = await supabase.from("events").delete().eq("id", id).eq("user_id", userId)
+        const { error } = await supabase.from("events").delete().eq("id", id).eq("user_id", resolvedUserId)
 
-        if (error) throw error
+        if (error) {
+          throw error
+        }
 
-        setEvents(events.filter((event) => event.id !== id))
+        setEvents((currentEvents) => currentEvents.filter((event) => event.id !== id))
 
-        toast({
-          title: "Событие удалено",
-          description: `Событие "${eventToDelete.title}" успешно удалено`,
-        })
-
-        return eventToDelete
+        return id
       } catch (error) {
         console.error("Error deleting event:", error)
         toast({
@@ -191,10 +215,24 @@ export function useEvents(userId?: string) {
           description: "Не удалось удалить событие",
           variant: "destructive",
         })
-        return null
+        throw error
       }
     },
-    [events, userId]
+    [resolvedUserId],
+  )
+
+  const archiveEvent = useCallback(
+    async (id: string) => {
+      const event = events.find((currentEvent) => currentEvent.id === id)
+      if (!event) {
+        return null
+      }
+
+      addArchivedEvent(event)
+      await deleteEvent(id)
+      return event
+    },
+    [deleteEvent, events],
   )
 
   return {
@@ -203,5 +241,6 @@ export function useEvents(userId?: string) {
     addEvent,
     updateEvent,
     deleteEvent,
+    archiveEvent,
   }
 }

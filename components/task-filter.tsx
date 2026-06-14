@@ -9,6 +9,7 @@ import type { TaskStatus } from "@/types"
 interface TaskFilterProps {
   onFilterChange: (status: TaskStatus | null) => void
   currentFilter: TaskStatus | null
+  availableTags?: unknown[]
 }
 
 export function TaskFilter({ onFilterChange, currentFilter }: TaskFilterProps) {
