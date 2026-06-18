@@ -21,6 +21,11 @@ function getEnv(name: string) {
   return value
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
 function getErrorStatus(error: unknown) {
   if (!(error instanceof Error)) {
     return 500
@@ -103,28 +108,23 @@ function getTelegramPassword(telegramId: number) {
 
 export async function POST(request: Request) {
   try {
-    console.log("TELEGRAM_AUTH_DEBUG_ENV", {
-      hasBotToken: Boolean(process.env.TELEGRAM_BOT_TOKEN),
-      hasServiceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-      hasJwtSecret: Boolean(process.env.SUPABASE_JWT_SECRET),
-      hasSupabaseUrl: Boolean(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL),
-      hasAnonKey: Boolean(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-    })
-
     const { initData } = await request.json()
 
     if (!initData || typeof initData !== "string") {
       return NextResponse.json({ error: "initData is required" }, { status: 400 })
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL")
+    const anonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
     const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY")
     const botToken = getEnv("TELEGRAM_BOT_TOKEN")
 
-    if (!supabaseUrl || !anonKey) {
-      throw new Error("Missing Supabase URL or anon key")
-    }
+    console.log("TELEGRAM_AUTH_DEBUG_ENV", {
+      supabaseUrl,
+      hasAnonKey: Boolean(anonKey),
+      hasServiceRoleKey: Boolean(serviceRoleKey),
+      hasBotToken: Boolean(botToken),
+    })
 
     const telegramUser = verifyTelegramInitData(initData, botToken)
     const email = getTelegramEmail(telegramUser.id)
@@ -150,6 +150,10 @@ export async function POST(request: Request) {
     })
 
     if (signInError || !signInData.session?.user) {
+      if (signInError && !signInError.message.toLowerCase().includes("invalid login credentials")) {
+        throw new Error(`Supabase signInWithPassword failed: ${getErrorMessage(signInError)}`)
+      }
+
       const { error: createError } = await adminClient.auth.admin.createUser({
         email,
         password,
@@ -166,12 +170,12 @@ export async function POST(request: Request) {
 
       if (createError) {
         if (!createError.message.toLowerCase().includes("already")) {
-          throw createError
+          throw new Error(`Supabase createUser failed: ${getErrorMessage(createError)}`)
         }
 
         const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers()
         if (listError) {
-          throw listError
+          throw new Error(`Supabase listUsers failed: ${getErrorMessage(listError)}`)
         }
 
         const existingUser = (usersData.users as Array<{ id: string; email?: string | null }>).find(
@@ -195,7 +199,7 @@ export async function POST(request: Request) {
         })
 
         if (updateUserError) {
-          throw updateUserError
+          throw new Error(`Supabase updateUserById failed: ${getErrorMessage(updateUserError)}`)
         }
       }
 
@@ -220,7 +224,7 @@ export async function POST(request: Request) {
     })
 
     if (upsertError) {
-      throw upsertError
+      throw new Error(`Supabase users upsert failed: ${getErrorMessage(upsertError)}`)
     }
 
     return NextResponse.json({
@@ -229,8 +233,9 @@ export async function POST(request: Request) {
       user: signInData.session.user,
     })
   } catch (error) {
-    console.error("TELEGRAM_AUTH_ERROR", error)
-    console.error("Telegram auth route error:", error)
+    console.error("TELEGRAM_AUTH_ERROR", {
+      message: getErrorMessage(error),
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Telegram auth failed" },
       { status: getErrorStatus(error) },
