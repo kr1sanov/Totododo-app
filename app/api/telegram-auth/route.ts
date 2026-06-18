@@ -103,6 +103,14 @@ function getTelegramPassword(telegramId: number) {
 
 export async function POST(request: Request) {
   try {
+    console.log("TELEGRAM_AUTH_DEBUG_ENV", {
+      hasBotToken: Boolean(process.env.TELEGRAM_BOT_TOKEN),
+      hasServiceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      hasJwtSecret: Boolean(process.env.SUPABASE_JWT_SECRET),
+      hasSupabaseUrl: Boolean(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL),
+      hasAnonKey: Boolean(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    })
+
     const { initData } = await request.json()
 
     if (!initData || typeof initData !== "string") {
@@ -221,6 +229,7 @@ export async function POST(request: Request) {
       user: signInData.session.user,
     })
   } catch (error) {
+    console.error("TELEGRAM_AUTH_ERROR", error)
     console.error("Telegram auth route error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Telegram auth failed" },
