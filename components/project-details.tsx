@@ -147,7 +147,7 @@ export function ProjectDetails({ projectId }: ProjectDetailsProps) {
         </Button>
       </div>
 
-      <h1 className="text-2xl font-bold mb-2">{project.name}</h1>
+      <h1 className="text-2xl font-bold mb-2">{project.title}</h1>
       {project.description && (
         <p className="text-muted-foreground mb-4">{project.description}</p>
       )}

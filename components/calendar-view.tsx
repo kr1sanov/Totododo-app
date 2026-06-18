@@ -424,7 +424,7 @@ export function CalendarView() {
           onSave={handleSaveItem}
           onArchive={handleArchiveItem}
           onDelete={handleDeleteItem}
-          projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+          projects={projects.map((project) => ({ id: project.id, name: project.title }))}
         />
       )}
     </div>

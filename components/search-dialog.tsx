@@ -47,7 +47,7 @@ export function SearchDialog({ isOpen, onClose }: SearchDialogProps) {
             type: "task",
             id: task.id,
             projectId: project.id,
-            projectName: project.name,
+            projectName: project.title,
             title: task.title,
             description: task.description,
             dueDate: task.dueDate,
@@ -79,11 +79,11 @@ export function SearchDialog({ isOpen, onClose }: SearchDialogProps) {
 
     // Поиск по проектам
     projects.forEach((project) => {
-      if (project.name.toLowerCase().includes(query)) {
+      if (project.title.toLowerCase().includes(query)) {
         results.push({
           type: "project",
           id: project.id,
-          title: project.name,
+          title: project.title,
           tasksCount: project.tasks.length,
         })
       }
