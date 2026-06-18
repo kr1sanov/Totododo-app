@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { getFromStorage, saveToStorage } from "@/lib/storage-utils"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/contexts/auth-context"
 
 export interface ArchivedItem {
   id: string
@@ -11,91 +12,167 @@ export interface ArchivedItem {
   item: any
 }
 
+function resolveArchiveType(item: ArchivedItem, explicitType?: string) {
+  return explicitType ?? item.type
+}
+
 export function useArchive() {
+  const { user } = useAuth()
   const [archivedItems, setArchivedItems] = useState<ArchivedItem[]>([])
-  const [isInitialized, setIsInitialized] = useState(false)
 
-  // Load archived items from localStorage
-  useEffect(() => {
-    const storedItems = getFromStorage("totododo-archive", [])
-    setArchivedItems(storedItems)
-    setIsInitialized(true)
-  }, [])
-
-  // Save archived items to localStorage when they change
-  useEffect(() => {
-    if (isInitialized) {
-      saveToStorage("totododo-archive", archivedItems)
+  const loadArchivedItems = useCallback(async () => {
+    if (!user?.id) {
+      setArchivedItems([])
+      return
     }
-  }, [archivedItems, isInitialized])
 
-  // Restore an item from archive
+    const [projectsResult, tasksResult] = await Promise.all([
+      supabase
+        .from("projects")
+        .select("id, title, updated_at, user_id, status")
+        .eq("user_id", user.id)
+        .eq("status", "archived"),
+      supabase
+        .from("tasks")
+        .select("id, title, updated_at, user_id, is_archived, is_deleted, project_id")
+        .eq("user_id", user.id)
+        .eq("is_archived", true),
+    ])
+
+    if (projectsResult.error) {
+      throw projectsResult.error
+    }
+
+    if (tasksResult.error) {
+      throw tasksResult.error
+    }
+
+    const projectItems: ArchivedItem[] = (projectsResult.data ?? []).map((project) => ({
+      id: project.id,
+      title: project.title,
+      type: "projects",
+      archivedAt: project.updated_at,
+      item: project,
+    }))
+
+    const taskItems: ArchivedItem[] = (tasksResult.data ?? []).map((task) => ({
+      id: task.id,
+      title: task.title,
+      type: "tasks",
+      archivedAt: task.updated_at,
+      item: task,
+    }))
+
+    setArchivedItems([...projectItems, ...taskItems])
+  }, [user?.id])
+
+  useEffect(() => {
+    loadArchivedItems().catch((error) => {
+      console.error("Error loading archived items:", error)
+      setArchivedItems([])
+    })
+  }, [loadArchivedItems])
+
+  const archiveProject = useCallback(async (id: string) => {
+    const { error } = await supabase
+      .from("projects")
+      .update({ status: "archived", updated_at: new Date().toISOString() })
+      .eq("id", id)
+
+    if (error) {
+      throw error
+    }
+
+    await loadArchivedItems()
+  }, [loadArchivedItems])
+
+  const archiveTask = useCallback(async (id: string) => {
+    const { error } = await supabase
+      .from("tasks")
+      .update({ is_archived: true, updated_at: new Date().toISOString() })
+      .eq("id", id)
+
+    if (error) {
+      throw error
+    }
+
+    await loadArchivedItems()
+  }, [loadArchivedItems])
+
   const restoreItem = useCallback(
-    (id: string) => {
+    async (id: string, type?: string) => {
       const itemToRestore = archivedItems.find((item) => item.id === id)
-
-      if (itemToRestore) {
-        // Optimistic update - remove from archive immediately
-        const updatedArchivedItems = archivedItems.filter((item) => item.id !== id)
-        setArchivedItems(updatedArchivedItems)
-
-        // Restore to original location based on type
-        if (itemToRestore.type === "projects") {
-          const projects = getFromStorage("totododo-projects", [])
-          const updatedProjects = [...projects, itemToRestore.item]
-          saveToStorage("totododo-projects", updatedProjects)
-        } else if (itemToRestore.type === "tasks") {
-          const projects = getFromStorage("totododo-projects", [])
-          const updatedProjects = projects.map((project: any) => {
-            if (project.id === itemToRestore.item.projectId) {
-              return {
-                ...project,
-                tasks: [...project.tasks, itemToRestore.item],
-              }
-            }
-            return project
-          })
-          saveToStorage("totododo-projects", updatedProjects)
-        } else if (itemToRestore.type === "event" || itemToRestore.type === "task") {
-          const calendarItems = getFromStorage("totododo-calendar-items", [])
-          const updatedCalendarItems = [...calendarItems, itemToRestore.item]
-          saveToStorage("totododo-calendar-items", updatedCalendarItems)
-        }
-
-        // Save updated archive
-        saveToStorage("totododo-archive", updatedArchivedItems)
-
-        return itemToRestore
+      if (!itemToRestore) {
+        return null
       }
 
-      return null
+      const resolvedType = resolveArchiveType(itemToRestore, type)
+
+      if (resolvedType === "projects") {
+        const { error } = await supabase
+          .from("projects")
+          .update({ status: "active", updated_at: new Date().toISOString() })
+          .eq("id", id)
+
+        if (error) {
+          throw error
+        }
+      } else if (resolvedType === "tasks") {
+        const { error } = await supabase
+          .from("tasks")
+          .update({ is_archived: false, updated_at: new Date().toISOString() })
+          .eq("id", id)
+
+        if (error) {
+          throw error
+        }
+      }
+
+      await loadArchivedItems()
+      return itemToRestore
     },
-    [archivedItems],
+    [archivedItems, loadArchivedItems],
   )
 
-  // Delete an item permanently from archive
   const deleteItem = useCallback(
-    (id: string) => {
+    async (id: string, type?: string) => {
       const itemToDelete = archivedItems.find((item) => item.id === id)
-
-      if (itemToDelete) {
-        // Optimistic update - remove from archive immediately
-        const updatedArchivedItems = archivedItems.filter((item) => item.id !== id)
-        setArchivedItems(updatedArchivedItems)
-
-        // Save updated archive
-        saveToStorage("totododo-archive", updatedArchivedItems)
-
-        return itemToDelete
+      if (!itemToDelete) {
+        return null
       }
 
-      return null
+      const resolvedType = resolveArchiveType(itemToDelete, type)
+
+      if (resolvedType === "projects") {
+        const { error } = await supabase
+          .from("projects")
+          .update({ status: "deleted", updated_at: new Date().toISOString() })
+          .eq("id", id)
+
+        if (error) {
+          throw error
+        }
+      } else if (resolvedType === "tasks") {
+        const { error } = await supabase
+          .from("tasks")
+          .update({ is_deleted: true, updated_at: new Date().toISOString() })
+          .eq("id", id)
+
+        if (error) {
+          throw error
+        }
+      }
+
+      await loadArchivedItems()
+      return itemToDelete
     },
-    [archivedItems],
+    [archivedItems, loadArchivedItems],
   )
 
   return {
     archivedItems,
+    archiveProject,
+    archiveTask,
     restoreItem,
     deleteItem,
   }

@@ -1,183 +1,488 @@
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   public: {
     Tables: {
-      users: {
+      events: {
         Row: {
-          id: string
-          telegram_id: number | null
-          telegram_username: string | null
-          telegram_first_name: string | null
-          telegram_last_name: string | null
-          telegram_photo_url: string | null
+          all_day: boolean
+          color: string | null
           created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          is_deleted: boolean
+          start_date: string
+          title: string
           updated_at: string
+          user_id: string
         }
         Insert: {
-          id: string
-          telegram_id?: number | null
-          telegram_username?: string | null
-          telegram_first_name?: string | null
-          telegram_last_name?: string | null
-          telegram_photo_url?: string | null
+          all_day?: boolean
+          color?: string | null
           created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_deleted?: boolean
+          start_date: string
+          title: string
           updated_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          telegram_id?: number | null
-          telegram_username?: string | null
-          telegram_first_name?: string | null
-          telegram_last_name?: string | null
-          telegram_photo_url?: string | null
+          all_day?: boolean
+          color?: string | null
           created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_deleted?: boolean
+          start_date?: string
+          title?: string
           updated_at?: string
+          user_id?: string
         }
+        Relationships: []
       }
       projects: {
         Row: {
-          id: string
-          user_id: string
-          name: string
+          color: string | null
           created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          status: string
+          title: string
           updated_at: string
-          is_archived: boolean
-          is_deleted: boolean
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          name: string
+          color?: string | null
           created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          status?: string
+          title: string
           updated_at?: string
-          is_archived?: boolean
-          is_deleted?: boolean
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          name?: string
+          color?: string | null
           created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          status?: string
+          title?: string
           updated_at?: string
-          is_archived?: boolean
-          is_deleted?: boolean
+          user_id?: string
         }
+        Relationships: []
       }
-      tasks: {
+      sent_reminders: {
         Row: {
           id: string
-          project_id: string
-          title: string
-          description: string | null
-          due_date: string | null
-          priority: "low" | "medium" | "high"
-          completed: boolean
-          location: string | null
-          created_at: string
-          updated_at: string
-          is_archived: boolean
-          is_deleted: boolean
+          item_id: string
+          item_type: string
+          sent_at: string
         }
         Insert: {
           id?: string
-          project_id: string
-          title: string
-          description?: string | null
-          due_date?: string | null
-          priority?: "low" | "medium" | "high"
-          completed?: boolean
-          location?: string | null
-          created_at?: string
-          updated_at?: string
-          is_archived?: boolean
-          is_deleted?: boolean
+          item_id: string
+          item_type: string
+          sent_at?: string
         }
         Update: {
           id?: string
-          project_id?: string
-          title?: string
-          description?: string | null
-          due_date?: string | null
-          priority?: "low" | "medium" | "high"
-          completed?: boolean
-          location?: string | null
-          created_at?: string
-          updated_at?: string
-          is_archived?: boolean
-          is_deleted?: boolean
+          item_id?: string
+          item_type?: string
+          sent_at?: string
         }
+        Relationships: []
       }
       subtasks: {
         Row: {
+          completed: boolean
+          created_at: string
           id: string
           task_id: string
           title: string
-          completed: boolean
-          created_at: string
           updated_at: string
+          user_id: string
         }
         Insert: {
+          completed?: boolean
+          created_at?: string
           id?: string
           task_id: string
           title: string
-          completed?: boolean
-          created_at?: string
           updated_at?: string
+          user_id: string
         }
         Update: {
+          completed?: boolean
+          created_at?: string
           id?: string
           task_id?: string
           title?: string
-          completed?: boolean
-          created_at?: string
           updated_at?: string
+          user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "subtasks_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
-      events: {
+      tags: {
         Row: {
-          id: string
-          user_id: string
-          title: string
-          start_date: string
-          end_date: string
-          location: string | null
-          description: string | null
-          repeat_type: "none" | "daily" | "weekly" | "monthly"
+          color: string
           created_at: string
-          updated_at: string
-          is_archived: boolean
-          is_deleted: boolean
+          id: string
+          name: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          title: string
-          start_date: string
-          end_date: string
-          location?: string | null
-          description?: string | null
-          repeat_type?: "none" | "daily" | "weekly" | "monthly"
+          color?: string
           created_at?: string
-          updated_at?: string
-          is_archived?: boolean
-          is_deleted?: boolean
+          id?: string
+          name: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          title?: string
-          start_date?: string
-          end_date?: string
-          location?: string | null
-          description?: string | null
-          repeat_type?: "none" | "daily" | "weekly" | "monthly"
+          color?: string
           created_at?: string
-          updated_at?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      task_tags: {
+        Row: {
+          tag_id: string
+          task_id: string
+        }
+        Insert: {
+          tag_id: string
+          task_id: string
+        }
+        Update: {
+          tag_id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_tags_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks: {
+        Row: {
+          completed: boolean
+          created_at: string
+          description: string | null
+          due_date: string | null
+          id: string
+          is_archived: boolean
+          is_deleted: boolean
+          location: string | null
+          priority: string
+          project_id: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed?: boolean
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
           is_archived?: boolean
           is_deleted?: boolean
+          location?: string | null
+          priority?: string
+          project_id?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
         }
+        Update: {
+          completed?: boolean
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          is_archived?: boolean
+          is_deleted?: boolean
+          location?: string | null
+          priority?: string
+          project_id?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
+      telegram_users: {
+        Row: {
+          chat_id: string | null
+          created_at: string
+          first_name: string | null
+          id: string
+          is_bot: boolean | null
+          language_code: string | null
+          last_name: string | null
+          photo_url: string | null
+          reminder_minutes: number
+          reminders_enabled: boolean
+          telegram_id: string
+          updated_at: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          chat_id?: string | null
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          is_bot?: boolean | null
+          language_code?: string | null
+          last_name?: string | null
+          photo_url?: string | null
+          reminder_minutes?: number
+          reminders_enabled?: boolean
+          telegram_id: string
+          updated_at?: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          chat_id?: string | null
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          is_bot?: boolean | null
+          language_code?: string | null
+          last_name?: string | null
+          photo_url?: string | null
+          reminder_minutes?: number
+          reminders_enabled?: boolean
+          telegram_id?: string
+          updated_at?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      users: {
+        Row: {
+          created_at: string | null
+          id: string
+          telegram_first_name: string
+          telegram_id: number
+          telegram_last_name: string | null
+          telegram_photo_url: string | null
+          telegram_username: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id: string
+          telegram_first_name: string
+          telegram_id: number
+          telegram_last_name?: string | null
+          telegram_photo_url?: string | null
+          telegram_username?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          telegram_first_name?: string
+          telegram_id?: number
+          telegram_last_name?: string | null
+          telegram_photo_url?: string | null
+          telegram_username?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
     }
   }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const

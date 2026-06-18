@@ -114,14 +114,16 @@ function normalizeProject(project: Record<string, unknown>): Project {
 
   return {
     id: projectId,
-    name: String(project.name ?? "Без названия"),
+    title: String(project.title ?? "Без названия"),
     description: project.description ? String(project.description) : undefined,
     tasks,
     createdAt: project.created_at ? String(project.created_at) : new Date().toISOString(),
     updatedAt: project.updated_at ? String(project.updated_at) : undefined,
     userId: project.user_id ? String(project.user_id) : undefined,
-    isArchived: Boolean(project.is_archived),
-    isDeleted: Boolean(project.is_deleted),
+    status:
+      project.status === "archived" || project.status === "deleted" || project.status === "active"
+        ? project.status
+        : "active",
   }
 }
 
@@ -156,8 +158,7 @@ export function useProjects() {
         .from("projects")
         .select("*, tasks(*, subtasks(*))")
         .eq("user_id", user.id)
-        .eq("is_archived", false)
-        .eq("is_deleted", false)
+        .eq("status", "active")
         .order("created_at", { ascending: true })
 
       if (error) {
@@ -246,11 +247,12 @@ export function useProjects() {
       const now = new Date().toISOString()
       const newProject: Project = {
         id: crypto.randomUUID(),
-        name: name.trim(),
+        title: name.trim(),
         tasks: [],
         createdAt: now,
         updatedAt: now,
         userId,
+        status: "active",
       }
 
       try {
@@ -258,9 +260,7 @@ export function useProjects() {
           .from("projects")
           .insert({
             id: newProject.id,
-            name: newProject.name,
-            created_at: newProject.createdAt,
-            updated_at: newProject.updatedAt,
+            title: newProject.title,
             user_id: userId,
           })
           .select("*")
@@ -276,7 +276,7 @@ export function useProjects() {
 
         toast({
           title: "Проект создан",
-          description: `Проект "${savedProject.name}" успешно создан`,
+          description: `Проект "${savedProject.title}" успешно создан`,
         })
 
         return savedProject
@@ -314,7 +314,7 @@ export function useProjects() {
         const { data, error } = await supabase
           .from("projects")
           .update({
-            name: updatedProject.name,
+            title: updatedProject.title,
             updated_at: updatedProject.updatedAt,
           })
           .eq("id", projectId)
@@ -383,7 +383,7 @@ export function useProjects() {
         throw new Error("PROJECT_NOT_FOUND")
       }
 
-      addArchivedItem(project.id, project.name, "projects", project)
+      addArchivedItem(project.id, project.title, "projects", project)
       await deleteProject(projectId)
       return project
     },
@@ -392,7 +392,10 @@ export function useProjects() {
 
   const addTask = useCallback(
     async (projectId: string, task: Omit<Task, "id" | "createdAt" | "updatedAt"> | Task) => {
-      requireUserId(user?.id)
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser()
+      const userId = requireUserId(authUser?.id ?? user?.id)
 
       const project = getProject(projectId)
 
@@ -417,6 +420,7 @@ export function useProjects() {
           .insert({
             id: newTask.id,
             project_id: projectId,
+            user_id: userId,
             title: newTask.title,
             description: newTask.description,
             due_date: newTask.dueDate,

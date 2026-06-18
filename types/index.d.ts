@@ -40,14 +40,13 @@ declare module "@/types" {
 
   export interface Project {
     id: string
-    name: string
+    title: string
     description?: string
     tasks: Task[]
     createdAt: string
     updatedAt?: string
     userId?: string
-    isArchived?: boolean
-    isDeleted?: boolean
+    status: "active" | "archived" | "deleted"
   }
 
   export interface CalendarItem {
