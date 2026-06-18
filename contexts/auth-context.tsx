@@ -14,19 +14,28 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-const SUPABASE_FUNCTIONS_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-  ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`
-  : "https://iohyczenmqoyrjxdcykz.supabase.co/functions/v1"
-
 function getTelegramWebApp() {
   if (typeof window === "undefined") return null
   return (window as any).Telegram?.WebApp ?? null
 }
 
+async function waitForTelegramWebApp() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const twa = getTelegramWebApp()
+    if (twa?.initData) {
+      return twa
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 150))
+  }
+
+  return getTelegramWebApp()
+}
+
 function isTelegramEnvironment() {
   if (typeof window === "undefined") return false
   const twa = (window as any).Telegram?.WebApp
-  return !!(twa?.initData && twa.initData.length > 0)
+  return Boolean(twa)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -58,18 +67,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // 2. Telegram WebApp авторизация
-        const twa = getTelegramWebApp()
+        const twa = await waitForTelegramWebApp()
         if (twa?.initData) {
           twa.ready()
           twa.expand()
-          const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/telegram-auth`, {
+          const res = await fetch("/api/telegram-auth", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ initData: twa.initData }),
           })
 
           if (!res.ok) {
-            throw new Error(`Telegram auth failed with status ${res.status}`)
+            const errorText = await res.text().catch(() => "")
+            throw new Error(`Telegram auth failed with status ${res.status}${errorText ? `: ${errorText}` : ""}`)
           }
 
           const data = await res.json()
@@ -101,10 +111,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
 
-        failAuth("Не удалось авторизоваться через Telegram. Откройте Mini App заново.")
+        failAuth("Telegram открыл Mini App, но не передал initData. Закройте и откройте приложение через бота заново.")
       } catch (err) {
         console.error("Telegram auth error:", err)
-        failAuth("Не удалось авторизоваться через Telegram. Откройте Mini App заново.")
+        failAuth((err as Error).message || "Не удалось авторизоваться через Telegram. Откройте Mini App заново.")
       } finally {
         setIsLoading(false)
       }
