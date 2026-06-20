@@ -97,7 +97,7 @@ export function CalendarExportDialog({ isOpen, onClose }: CalendarExportDialogPr
               `DTSTAMP:${formatDate(new Date())}`,
               `DTSTART:${formatDate(dueDate)}`,
               `DTEND:${formatDate(new Date(dueDate.getTime() + 30 * 60000))}`, // Добавляем 30 минут к дедлайну
-              `SUMMARY:${task.completed ? "[Выполнено] " : ""}${task.title} (${project.name})`,
+              `SUMMARY:${task.completed ? "[Выполнено] " : ""}${task.title} (${project.title})`,
             )
 
             if (task.description) {

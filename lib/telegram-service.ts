@@ -1,7 +1,8 @@
-import { getFromStorage, saveToStorage, isClient } from "./storage-utils"
+import { createServerClient } from "@supabase/ssr"
+import type { Database } from "@/types/supabase"
+import { supabase } from "./supabase"
 
-// Токен Telegram бота
-const TELEGRAM_BOT_TOKEN = "7979131458:AAFFnqMl_OgxalyGgH2ll9Smr1juYMzqTKg"
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? ""
 
 // Интерфейс для настроек уведомлений
 export interface NotificationSettings {
@@ -12,28 +13,153 @@ export interface NotificationSettings {
   reminderTime: number // в минутах
 }
 
-// Получение настроек уведомлений из localStorage
-export function getNotificationSettings(): NotificationSettings {
-  return getFromStorage("totododo-notification-settings", {
+function getDefaultNotificationSettings(): NotificationSettings {
+  return {
     enabled: false,
     chatId: undefined,
     eventReminders: true,
     taskReminders: true,
     reminderTime: 30, // 30 минут до события
+  }
+}
+
+function getTelegramBotToken() {
+  if (!TELEGRAM_BOT_TOKEN) {
+    throw new Error("TELEGRAM_BOT_TOKEN is not set")
+  }
+
+  return TELEGRAM_BOT_TOKEN
+}
+
+function getServerSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set")
+  }
+
+  if (!serviceRoleKey) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set")
+  }
+
+  return createServerClient<Database>(supabaseUrl, serviceRoleKey, {
+    cookies: {
+      getAll() {
+        return []
+      },
+      setAll() {},
+    },
   })
 }
 
-// Сохранение настроек уведомлений
-export function saveNotificationSettings(settings: NotificationSettings): void {
-  saveToStorage("totododo-notification-settings", settings)
+async function getTelegramProfile(userId: string) {
+  const { data: authData, error: authError } = await supabase.auth.getUser()
+
+  if (authError) {
+    throw authError
+  }
+
+  if (authData.user?.id !== userId) {
+    throw new Error("AUTH_REQUIRED")
+  }
+
+  const metadataTelegramId = authData.user.user_metadata?.telegram_id
+  if (metadataTelegramId) {
+    return {
+      telegram_id: String(metadataTelegramId),
+      username:
+        typeof authData.user.user_metadata?.telegram_username === "string"
+          ? authData.user.user_metadata.telegram_username
+          : null,
+      first_name:
+        typeof authData.user.user_metadata?.telegram_first_name === "string"
+          ? authData.user.user_metadata.telegram_first_name
+          : null,
+      last_name:
+        typeof authData.user.user_metadata?.telegram_last_name === "string"
+          ? authData.user.user_metadata.telegram_last_name
+          : null,
+      photo_url:
+        typeof authData.user.user_metadata?.telegram_photo_url === "string"
+          ? authData.user.user_metadata.telegram_photo_url
+          : null,
+    }
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("users")
+    .select("telegram_id, telegram_username, telegram_first_name, telegram_last_name, telegram_photo_url")
+    .eq("id", userId)
+    .single()
+
+  if (profileError) {
+    throw profileError
+  }
+
+  return {
+    telegram_id: String(profile.telegram_id),
+    username: profile.telegram_username ?? null,
+    first_name: profile.telegram_first_name ?? null,
+    last_name: profile.telegram_last_name ?? null,
+    photo_url: profile.telegram_photo_url ?? null,
+  }
+}
+
+// Получение настроек уведомлений из Supabase
+export async function getNotificationSettings(userId: string): Promise<NotificationSettings> {
+  const { data, error } = await supabase
+    .from("telegram_users")
+    .select("reminders_enabled, reminder_minutes, chat_id")
+    .eq("user_id", userId)
+    .single()
+
+  if (error) {
+    if (error.code === "PGRST116") {
+      return getDefaultNotificationSettings()
+    }
+
+    throw error
+  }
+
+  return {
+    enabled: data.reminders_enabled,
+    chatId: data.chat_id ?? undefined,
+    eventReminders: true,
+    taskReminders: true,
+    reminderTime: data.reminder_minutes,
+  }
+}
+
+// Сохранение настроек уведомлений в Supabase
+export async function saveNotificationSettings(settings: NotificationSettings, userId: string): Promise<void> {
+  const profile = await getTelegramProfile(userId)
+  const { data: existingRow } = await supabase.from("telegram_users").select("id").eq("user_id", userId).single()
+
+  const payload = {
+    ...(existingRow?.id ? { id: existingRow.id } : {}),
+    user_id: userId,
+    telegram_id: profile.telegram_id,
+    username: profile.username,
+    first_name: profile.first_name,
+    last_name: profile.last_name,
+    photo_url: profile.photo_url,
+    chat_id: settings.chatId ?? null,
+    reminders_enabled: settings.enabled,
+    reminder_minutes: settings.reminderTime,
+  }
+
+  const { error } = await supabase.from("telegram_users").upsert(payload)
+
+  if (error) {
+    throw error
+  }
 }
 
 // Отправка сообщения через Telegram бота
 export async function sendTelegramMessage(chatId: string, message: string): Promise<boolean> {
-  if (!isClient) return false
-
   try {
-    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const response = await fetch(`https://api.telegram.org/bot${getTelegramBotToken()}/sendMessage`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -54,10 +180,7 @@ export async function sendTelegramMessage(chatId: string, message: string): Prom
 }
 
 // Отправка уведомления о событии
-export async function sendEventReminder(event: any): Promise<boolean> {
-  if (!isClient) return false
-
-  const settings = getNotificationSettings()
+export async function sendEventReminder(event: any, settings: NotificationSettings): Promise<boolean> {
 
   if (!settings.enabled || !settings.chatId || !settings.eventReminders) {
     return false
@@ -84,10 +207,7 @@ ${event.description ? `\n${event.description}` : ""}
 }
 
 // Отправка уведомления о задаче
-export async function sendTaskReminder(task: any, projectName: string): Promise<boolean> {
-  if (!isClient) return false
-
-  const settings = getNotificationSettings()
+export async function sendTaskReminder(task: any, projectName: string, settings: NotificationSettings): Promise<boolean> {
 
   if (!settings.enabled || !settings.chatId || !settings.taskReminders) {
     return false
@@ -124,63 +244,144 @@ ${task.description ? `\n${task.description}` : ""}
 }
 
 // Проверка и отправка уведомлений
-export function checkAndSendReminders(): void {
-  if (!isClient) return
-
-  const settings = getNotificationSettings()
+export async function checkAndSendReminders(user: {
+  user_id: string
+  chat_id: string | null
+  reminder_minutes: number
+  reminders_enabled: boolean
+}): Promise<void> {
+  const settings: NotificationSettings = {
+    enabled: user.reminders_enabled,
+    chatId: user.chat_id ?? undefined,
+    eventReminders: true,
+    taskReminders: true,
+    reminderTime: user.reminder_minutes,
+  }
 
   if (!settings.enabled || !settings.chatId) {
     return
   }
 
+  const serverSupabase = getServerSupabaseClient()
   const now = new Date()
   const reminderTimeMs = settings.reminderTime * 60 * 1000 // в миллисекундах
 
   // Проверяем события
   if (settings.eventReminders) {
-    const events = getFromStorage("totododo-events", [])
+    const { data: events, error: eventsError } = await serverSupabase
+      .from("events")
+      .select("id, title, start_date, description")
+      .eq("user_id", user.user_id)
+      .eq("is_deleted", false)
 
-    events.forEach((event: any) => {
-      const eventTime = new Date(event.startDate)
+    if (eventsError) {
+      throw eventsError
+    }
+
+    for (const event of events ?? []) {
+      const eventTime = new Date(event.start_date)
       const timeDiff = eventTime.getTime() - now.getTime()
 
       // Если событие в пределах времени напоминания и еще не отправлено
       if (timeDiff > 0 && timeDiff <= reminderTimeMs) {
-        const sentReminders = getFromStorage("totododo-sent-reminders", [])
         const reminderKey = `event-${event.id}`
+        const { data: sentReminder } = await serverSupabase
+          .from("sent_reminders")
+          .select("id")
+          .eq("item_type", reminderKey)
+          .eq("item_id", event.id)
+          .maybeSingle()
 
-        if (!sentReminders.includes(reminderKey)) {
-          sendEventReminder(event)
-          sentReminders.push(reminderKey)
-          saveToStorage("totododo-sent-reminders", sentReminders)
+        if (!sentReminder) {
+          const sent = await sendEventReminder(
+              {
+                id: event.id,
+                title: event.title,
+                startDate: event.start_date,
+                description: event.description,
+              },
+            settings,
+          )
+
+          if (sent) {
+            const { error: reminderError } = await serverSupabase.from("sent_reminders").insert({
+              item_id: event.id,
+              item_type: reminderKey,
+            })
+
+            if (reminderError) {
+              throw reminderError
+            }
+          }
         }
       }
-    })
+    }
   }
 
   // Проверяем задачи
   if (settings.taskReminders) {
-    const projects = getFromStorage("totododo-projects", [])
+    const [{ data: tasks, error: tasksError }, { data: projects, error: projectsError }] = await Promise.all([
+      serverSupabase
+        .from("tasks")
+        .select("id, title, due_date, location, description, priority, project_id")
+        .eq("user_id", user.user_id)
+        .eq("is_deleted", false)
+        .eq("is_archived", false),
+      serverSupabase.from("projects").select("id, title").eq("user_id", user.user_id).eq("status", "active"),
+    ])
 
-    projects.forEach((project: any) => {
-      project.tasks.forEach((task: any) => {
-        if (task.dueDate) {
-          const taskTime = new Date(task.dueDate)
-          const timeDiff = taskTime.getTime() - now.getTime()
+    if (tasksError) {
+      throw tasksError
+    }
 
-          // Если задача в пределах времени напоминания и еще не отправлена
-          if (timeDiff > 0 && timeDiff <= reminderTimeMs) {
-            const sentReminders = getFromStorage("totododo-sent-reminders", [])
-            const reminderKey = `task-${task.id}`
+    if (projectsError) {
+      throw projectsError
+    }
 
-            if (!sentReminders.includes(reminderKey)) {
-              sendTaskReminder(task, project.name)
-              sentReminders.push(reminderKey)
-              saveToStorage("totododo-sent-reminders", sentReminders)
+    const projectTitleById = new Map((projects ?? []).map((project) => [project.id, project.title]))
+
+    for (const task of tasks ?? []) {
+      if (task.due_date) {
+        const taskTime = new Date(task.due_date)
+        const timeDiff = taskTime.getTime() - now.getTime()
+
+        // Если задача в пределах времени напоминания и еще не отправлена
+        if (timeDiff > 0 && timeDiff <= reminderTimeMs) {
+          const reminderKey = `task-${task.id}`
+          const { data: sentReminder } = await serverSupabase
+            .from("sent_reminders")
+            .select("id")
+            .eq("item_type", reminderKey)
+            .eq("item_id", task.id)
+            .maybeSingle()
+
+          if (!sentReminder) {
+            const sent = await sendTaskReminder(
+              {
+                id: task.id,
+                title: task.title,
+                dueDate: task.due_date,
+                location: task.location,
+                description: task.description,
+                priority: task.priority,
+              },
+              projectTitleById.get(task.project_id ?? "") ?? "Без проекта",
+              settings,
+            )
+
+            if (sent) {
+              const { error: reminderError } = await serverSupabase.from("sent_reminders").insert({
+                item_id: task.id,
+                item_type: reminderKey,
+              })
+
+              if (reminderError) {
+                throw reminderError
+              }
             }
           }
         }
-      })
-    })
+      }
+    }
   }
 }

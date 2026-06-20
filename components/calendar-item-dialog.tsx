@@ -259,7 +259,7 @@ export function CalendarItemDialog({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && !isSubmitting && onClose()}>
       <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
@@ -455,27 +455,6 @@ export function CalendarItemDialog({
 
           {type === "task" && (
             <>
-              <div className="grid gap-2">
-                <Label className="text-base">Проект</Label>
-                <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger className="h-12 text-base">
-                    <SelectValue placeholder={projects.length > 0 ? "Выберите проект" : "Будет создан Inbox"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {projects.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    При сохранении будет создан системный проект Inbox.
-                  </p>
-                )}
-              </div>
-
               <div className="grid gap-2">
                 <Label className="text-base">Приоритет</Label>
                 <RadioGroup value={priority} onValueChange={(value) => setPriority(value as any)} className="space-y-3">

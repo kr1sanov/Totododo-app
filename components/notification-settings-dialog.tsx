@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -22,6 +23,7 @@ interface NotificationSettingsDialogProps {
 }
 
 export function NotificationSettingsDialog({ isOpen, onClose }: NotificationSettingsDialogProps) {
+  const { user } = useAuth()
   const [settings, setSettings] = useState<NotificationSettings>({
     enabled: false,
     chatId: undefined,
@@ -35,25 +37,39 @@ export function NotificationSettingsDialog({ isOpen, onClose }: NotificationSett
 
   useEffect(() => {
     setIsMounted(true)
-    if (isClient && isOpen) {
-      const currentSettings = getNotificationSettings()
-      setSettings(currentSettings)
-      setChatId(currentSettings.chatId || "")
+    if (isClient && isOpen && user?.id) {
+      void getNotificationSettings(user.id)
+        .then((currentSettings) => {
+          setSettings(currentSettings)
+          setChatId(currentSettings.chatId || "")
+        })
+        .catch((error) => {
+          console.error("Error loading notification settings:", error)
+        })
     }
-  }, [isOpen])
+  }, [isOpen, user?.id])
 
   // Если компонент не смонтирован (серверный рендеринг), не показываем ничего
   if (!isMounted) {
     return null
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!user?.id) {
+      toast({
+        title: "Ошибка",
+        description: "Нужна авторизация для сохранения настроек",
+        variant: "destructive",
+      })
+      return
+    }
+
     const newSettings = {
       ...settings,
       chatId: chatId.trim() || undefined,
     }
 
-    saveNotificationSettings(newSettings)
+    await saveNotificationSettings(newSettings, user.id)
 
     toast({
       title: "Настройки сохранены",
@@ -191,7 +207,7 @@ export function NotificationSettingsDialog({ isOpen, onClose }: NotificationSett
           <Button variant="outline" onClick={onClose}>
             Отмена
           </Button>
-          <Button onClick={handleSave}>Сохранить</Button>
+          <Button onClick={() => void handleSave()}>Сохранить</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

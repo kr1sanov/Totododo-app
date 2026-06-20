@@ -74,7 +74,7 @@ export function ProjectsList() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <Link href={`/projects/${project.id}`} className="flex-1">
-                    <div className="font-medium">{project.name}</div>
+                    <div className="font-medium">{project.title}</div>
                     <div className="mt-1 text-sm text-muted-foreground">
                       {project.tasks.length > 0
                         ? `${project.tasks.filter((t) => t.completed).length}/${project.tasks.length} задач`
@@ -90,11 +90,11 @@ export function ProjectsList() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem>Изменить</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleArchiveProject(project.id, project.name)}>
+                      <DropdownMenuItem onClick={() => handleArchiveProject(project.id, project.title)}>
                         Архивировать
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => handleDeleteProject(project.id, project.name)}
+                        onClick={() => handleDeleteProject(project.id, project.title)}
                         className="text-destructive"
                       >
                         Удалить

@@ -119,13 +119,6 @@ export async function POST(request: Request) {
     const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY")
     const botToken = getEnv("TELEGRAM_BOT_TOKEN")
 
-    console.log("TELEGRAM_AUTH_DEBUG_ENV", {
-      supabaseUrl,
-      hasAnonKey: Boolean(anonKey),
-      hasServiceRoleKey: Boolean(serviceRoleKey),
-      hasBotToken: Boolean(botToken),
-    })
-
     const telegramUser = verifyTelegramInitData(initData, botToken)
     const email = getTelegramEmail(telegramUser.id)
     const password = getTelegramPassword(telegramUser.id)
@@ -233,9 +226,7 @@ export async function POST(request: Request) {
       user: signInData.session.user,
     })
   } catch (error) {
-    console.error("TELEGRAM_AUTH_ERROR", {
-      message: getErrorMessage(error),
-    })
+    console.error("Telegram auth route error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Telegram auth failed" },
       { status: getErrorStatus(error) },

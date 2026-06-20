@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CalendarItemCard } from "@/components/calendar-item-card"
-import { format, addDays, isToday, isSameDay, subDays, addMonths, subMonths } from "date-fns"
+import { format, addDays, isToday, isSameDay, startOfDay, subDays, addMonths, subMonths } from "date-fns"
 import { ru } from "date-fns/locale"
 
 interface CalendarTimelineProps {
@@ -19,6 +19,21 @@ interface CalendarTimelineProps {
   items: any[]
   onMonthChange?: (monthLabel: string) => void
   onArchiveItem?: (id: string) => void
+  onVisibleDateChange?: (date: Date) => void
+}
+
+function buildDateRange(centerDate: Date) {
+  const startDate = subMonths(centerDate, 6)
+  const endDate = addMonths(centerDate, 6)
+  const nextDates: Date[] = []
+  let currentDate = new Date(startDate)
+
+  while (currentDate <= endDate) {
+    nextDates.push(new Date(currentDate))
+    currentDate = addDays(currentDate, 1)
+  }
+
+  return nextDates
 }
 
 export function CalendarTimeline(props: CalendarTimelineProps) {
@@ -33,9 +48,10 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
     items,
     onMonthChange,
     onArchiveItem,
+    onVisibleDateChange,
   } = props
 
-  const [dates, setDates] = useState<Date[]>([])
+  const [dates, setDates] = useState<Date[]>(() => buildDateRange(selectedDate))
   const timelineRef = useRef<HTMLDivElement>(null)
   const topObserverRef = useRef<IntersectionObserver | null>(null)
   const bottomObserverRef = useRef<IntersectionObserver | null>(null)
@@ -44,28 +60,20 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
   const [isLoading, setIsLoading] = useState(false)
   const isInitialScrollRef = useRef(true)
   const lastVisibleMonthRef = useRef("")
+  const lastVisibleDateRef = useRef("")
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const selectedDateRef = useRef(startOfDay(selectedDate))
+  const pendingScrollTargetRef = useRef<string | null>(null)
 
   // Генерируем начальные даты
   const generateInitialDates = useCallback(() => {
-    const startDate = subMonths(selectedDate, 6)
-    const endDate = addMonths(selectedDate, 6)
-
-    const newDates = []
-    let currentDate = new Date(startDate)
-
-    while (currentDate <= endDate) {
-      newDates.push(new Date(currentDate))
-      currentDate = addDays(currentDate, 1)
-    }
-
-    return newDates
+    return buildDateRange(selectedDate)
   }, [selectedDate])
 
   // Инициализация дат
   useEffect(() => {
-    setDates(generateInitialDates())
-  }, [generateInitialDates])
+    selectedDateRef.current = startOfDay(selectedDate)
+  }, [selectedDate])
 
   // Загрузка дополнительных дат при прокрутке вниз
   const loadMoreDates = useCallback(() => {
@@ -181,7 +189,7 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
   // Обновление видимого месяца при прокрутке
   useEffect(() => {
     const timeline = timelineRef.current
-    if (!timeline || !onMonthChange) return
+    if (!timeline) return
 
     const handleScroll = () => {
       if (scrollTimeoutRef.current) {
@@ -192,7 +200,34 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
         if (!timeline) return
 
         // Находим все заголовки месяцев
-        const monthHeaders = document.querySelectorAll("[data-month-header]")
+        const daySections = timeline.querySelectorAll<HTMLElement>("[data-date-anchor]")
+        if (daySections.length > 0 && onVisibleDateChange) {
+          const timelineRect = timeline.getBoundingClientRect()
+          const threshold = timelineRect.top + 180
+          let visibleSection = daySections[0]
+
+          for (const section of daySections) {
+            const rect = section.getBoundingClientRect()
+            if (rect.top <= threshold) {
+              visibleSection = section
+            } else {
+              break
+            }
+          }
+
+          const visibleDateValue = visibleSection.getAttribute("data-date-value")
+          if (visibleDateValue && visibleDateValue !== lastVisibleDateRef.current) {
+            lastVisibleDateRef.current = visibleDateValue
+            const nextVisibleDate = new Date(visibleDateValue)
+            if (!isSameDay(nextVisibleDate, selectedDateRef.current)) {
+              onVisibleDateChange(nextVisibleDate)
+            }
+          }
+        }
+
+        if (!onMonthChange) return
+
+        const monthHeaders = timeline.querySelectorAll("[data-month-header]")
         if (monthHeaders.length === 0) return
 
         // Определяем видимую область
@@ -238,46 +273,82 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
         clearTimeout(scrollTimeoutRef.current)
       }
     }
-  }, [onMonthChange])
+  }, [onMonthChange, onVisibleDateChange])
+
+  const ensureDateInRange = useCallback(
+    (targetDate: Date) => {
+      const targetTime = startOfDay(targetDate).getTime()
+
+      setDates((prevDates) => {
+        if (prevDates.length === 0) {
+          return generateInitialDates()
+        }
+
+        const firstDate = startOfDay(prevDates[0]).getTime()
+        const lastDate = startOfDay(prevDates[prevDates.length - 1]).getTime()
+
+        if (targetTime >= firstDate && targetTime <= lastDate) {
+          return prevDates
+        }
+
+        return buildDateRange(targetDate)
+      })
+    },
+    [generateInitialDates],
+  )
+
+  const scrollToDate = useCallback(
+    (targetDate: Date, behavior: ScrollBehavior) => {
+      const targetDateString = startOfDay(targetDate).toISOString().split("T")[0]
+      const targetElement = timelineRef.current?.querySelector<HTMLElement>(`#date-${targetDateString}`)
+
+      if (targetElement && timelineRef.current) {
+        timelineRef.current.scrollTo({
+          top: Math.max(targetElement.offsetTop - 96, 0),
+          behavior,
+        })
+        pendingScrollTargetRef.current = null
+        return true
+      }
+
+      pendingScrollTargetRef.current = targetDateString
+      ensureDateInRange(targetDate)
+      return false
+    },
+    [ensureDateInRange],
+  )
 
   // Первоначальная прокрутка к выбранной дате
   useEffect(() => {
     if (dates.length === 0 || !timelineRef.current || !isInitialScrollRef.current) return
 
-    const today = new Date()
-    const todayString = today.toISOString().split("T")[0]
-    const todayElement = document.getElementById(`date-${todayString}`)
+    const hasScrolled = scrollToDate(selectedDate, "auto")
 
-    if (todayElement) {
+    if (hasScrolled) {
       setTimeout(() => {
-        if (timelineRef.current) {
-          timelineRef.current.scrollTo({
-            top: todayElement.offsetTop - 150,
-            behavior: "auto",
-          })
-          isInitialScrollRef.current = false
-        }
-      }, 100)
+        isInitialScrollRef.current = false
+      }, 50)
     }
-  }, [dates])
+  }, [dates, scrollToDate, selectedDate])
 
   // Прокрутка к новой выбранной дате
   useEffect(() => {
     if (dates.length === 0 || !timelineRef.current || isInitialScrollRef.current) return
 
-    const selectedDateString = selectedDate.toISOString().split("T")[0]
-    const selectedElement = document.getElementById(`date-${selectedDateString}`)
-
-    if (selectedElement) {
-      timelineRef.current.scrollTo({
-        top: selectedElement.offsetTop - 150,
-        behavior: "smooth",
-      })
-    } else {
-      // Если элемент не найден, значит дата не загружена. Загружаем новые даты
-      setDates(generateInitialDates())
+    if (pendingScrollTargetRef.current) {
+      const pendingElement = timelineRef.current.querySelector<HTMLElement>(`#date-${pendingScrollTargetRef.current}`)
+      if (pendingElement) {
+        timelineRef.current.scrollTo({
+          top: Math.max(pendingElement.offsetTop - 96, 0),
+          behavior: "auto",
+        })
+        pendingScrollTargetRef.current = null
+        return
+      }
     }
-  }, [selectedDate, dates.length, generateInitialDates])
+
+    scrollToDate(selectedDate, "smooth")
+  }, [selectedDate, dates.length, scrollToDate])
 
   // Получение элементов для даты
   const getItemsForDate = useCallback(
@@ -372,7 +443,7 @@ export function CalendarTimeline(props: CalendarTimelineProps) {
         const isSelectedDay = isSameDay(date, selectedDate)
 
         return (
-          <div key={dateKey} id={dateId}>
+          <div key={dateKey} id={dateId} data-date-anchor data-date-value={date.toISOString()}>
             {isFirstOfMonth && (
               <div
                 className="py-2 px-4 bg-muted/30 font-medium sticky top-0 z-10"

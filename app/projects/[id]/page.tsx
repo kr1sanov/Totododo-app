@@ -13,7 +13,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <div className="flex-1 overflow-auto pb-16">
         <ProjectDetails projectId={id} />
       </div>
-      <BottomNavigation activeTab="projects" />
+      <BottomNavigation activeTab="calendar" />
     </main>
   )
 }

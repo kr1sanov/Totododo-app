@@ -16,7 +16,7 @@ export default function ProjectsPage() {
       <div className="flex-1 overflow-auto pb-24">
         <ProjectsList />
       </div>
-      <BottomNavigation activeTab="projects" />
+      <BottomNavigation activeTab="calendar" />
     </main>
   )
 }
