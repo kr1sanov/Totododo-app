@@ -32,7 +32,7 @@ interface CalendarItem {
   isAllDay?: boolean
   endDate?: string
   projectId?: string
-  createdAt?: string
+  createdAt: string
 }
 
 function getTimeLabel(value?: string) {
@@ -52,13 +52,15 @@ function mergeDateAndTime(dateValue: string, timeValue?: string) {
 }
 
 export function CalendarView() {
+  const getToday = useCallback(() => new Date(), [])
+
   // Состояния
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false)
   const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false)
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false)
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const [selectedType, setSelectedType] = useState(null)
-  const [selectedItem, setSelectedItem] = useState(null)
+  const [selectedDate, setSelectedDate] = useState<Date>(getToday)
+  const [selectedType, setSelectedType] = useState<"task" | "event" | null>(null)
+  const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null)
   const [forceUpdate, setForceUpdate] = useState(false)
   const [currentMonthLabel, setCurrentMonthLabel] = useState("")
 
@@ -81,7 +83,7 @@ export function CalendarView() {
         repeatType: "none" as const,
         files: task.files,
         projectId: project.id,
-        createdAt: task.createdAt,
+        createdAt: task.createdAt || new Date().toISOString(),
       })),
     )
 
@@ -97,7 +99,7 @@ export function CalendarView() {
       repeatType: event.repeatType,
       endDate: event.endDate,
       isAllDay: false,
-      createdAt: event.createdAt,
+      createdAt: event.createdAt || event.startDate,
     }))
 
     return [...projectTasks, ...calendarEvents]
@@ -105,33 +107,33 @@ export function CalendarView() {
 
   // Установка текущей даты и месяца при первой загрузке
   useEffect(() => {
-    const now = new Date()
+    const now = getToday()
     setSelectedDate(now)
     setCurrentMonthLabel(format(now, "LLLL yyyy", { locale: ru }))
-  }, [])
+  }, [getToday])
 
   // Обработчики
   const toggleCalendar = () => {
     setIsCalendarExpanded(!isCalendarExpanded)
   }
 
-  const handleDateSelect = (date) => {
+  const handleDateSelect = useCallback((date: Date) => {
     setSelectedDate(date)
-  }
+  }, [])
 
-  const handleCreateItem = (date) => {
+  const handleCreateItem = (date: Date) => {
     setSelectedDate(date)
     setSelectedItem(null)
     setIsTypeDialogOpen(true)
   }
 
-  const handleTypeSelect = (type) => {
+  const handleTypeSelect = (type: "task" | "event") => {
     setSelectedType(type)
     setIsTypeDialogOpen(false)
     setIsItemDialogOpen(true)
   }
 
-  const handleEditItem = (item) => {
+  const handleEditItem = (item: CalendarItem) => {
     setSelectedItem(item)
     setSelectedType(item.type)
     setSelectedDate(new Date(item.date))
@@ -141,6 +143,16 @@ export function CalendarView() {
   // Callback для обновления текущего месяца при прокрутке
   const handleMonthChange = useCallback((monthLabel) => {
     setCurrentMonthLabel(monthLabel)
+  }, [])
+
+  const handleVisibleDateChange = useCallback((date: Date) => {
+    setSelectedDate((current) => {
+      if (current.toDateString() === date.toDateString()) {
+        return current
+      }
+
+      return date
+    })
   }, [])
 
   // Оптимистичное обновление при создании элемента
@@ -339,10 +351,11 @@ export function CalendarView() {
 
   // Обработчик для кнопки "Сегодня"
   const handleGoToToday = useCallback(() => {
-    const now = new Date()
+    const now = getToday()
     setSelectedDate(now)
     goToToday()
-  }, [goToToday])
+    setCurrentMonthLabel(format(now, "LLLL yyyy", { locale: ru }))
+  }, [getToday, goToToday])
 
   // Закрытие диалога создания/редактирования
   const handleCloseItemDialog = useCallback(() => {
@@ -398,6 +411,7 @@ export function CalendarView() {
           onCloseItemCard={handleCloseItemCard}
           items={items}
           onMonthChange={handleMonthChange}
+          onVisibleDateChange={handleVisibleDateChange}
         />
       </div>
 

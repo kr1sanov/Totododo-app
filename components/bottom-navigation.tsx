@@ -5,7 +5,7 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 interface BottomNavigationProps {
-  activeTab: "calendar" | "projects" | "settings"
+  activeTab: "calendar" | "settings"
 }
 
 export function BottomNavigation({ activeTab }: BottomNavigationProps) {
@@ -21,16 +21,6 @@ export function BottomNavigation({ activeTab }: BottomNavigationProps) {
         >
           <Calendar className="h-6 w-6" />
           <span className="font-medium">Календарь</span>
-        </Link>
-        <Link
-          href="/projects"
-          className={cn(
-            "flex flex-1 flex-col items-center justify-center gap-1 py-3 text-xs transition-colors",
-            activeTab === "projects" ? "text-foreground" : "text-muted-foreground",
-          )}
-        >
-          <span className="text-lg leading-none">#</span>
-          <span className="font-medium">Проекты</span>
         </Link>
         <Link
           href="/settings"
