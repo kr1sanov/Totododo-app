@@ -124,18 +124,25 @@ export function CalendarView() {
   const handleCreateItem = (date: Date) => {
     setSelectedDate(date)
     setSelectedItem(null)
+    setSelectedType(null)
+    setIsItemDialogOpen(false)
     setIsTypeDialogOpen(true)
   }
 
   const handleTypeSelect = (type: "task" | "event") => {
-    setSelectedType(type)
     setIsTypeDialogOpen(false)
-    setIsItemDialogOpen(true)
+    setSelectedType(type)
+
+    // Даем первому dialog корректно закрыться, прежде чем открыть форму создания.
+    window.setTimeout(() => {
+      setIsItemDialogOpen(true)
+    }, 0)
   }
 
   const handleEditItem = (item: CalendarItem) => {
     setSelectedItem(item)
     setSelectedType(item.type)
+    setIsTypeDialogOpen(false)
     setSelectedDate(new Date(item.date))
     setIsItemDialogOpen(true)
   }
@@ -360,6 +367,8 @@ export function CalendarView() {
   // Закрытие диалога создания/редактирования
   const handleCloseItemDialog = useCallback(() => {
     setIsItemDialogOpen(false)
+    setSelectedType(null)
+    setSelectedItem(null)
     setForceUpdate(!forceUpdate)
   }, [forceUpdate])
 
@@ -430,6 +439,7 @@ export function CalendarView() {
 
       {selectedType && (
         <CalendarItemDialog
+          key={`${selectedType}-${selectedItem?.id ?? "new"}-${selectedDate.toISOString()}`}
           isOpen={isItemDialogOpen}
           onClose={handleCloseItemDialog}
           date={selectedDate || today}
